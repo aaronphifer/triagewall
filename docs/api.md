@@ -190,6 +190,13 @@ the current live queue.
 including a one-page result with no `next_cursor`. Pass it to investigation when
 Previous/Next must remain inside the exact queue window the analyst loaded.
 
+Each verdict includes nullable `zeek_context` provenance. Queue rows contain
+only the eligibility reason, lookup status, source, match strategy, counts,
+truncation flag, and recording time; their `context` member is always `null`.
+This keeps list response cost bounded independently of the retained evidence
+size. A missing `zeek_context` means enrichment was not evaluated, normally
+because it was disabled or the row predates the integration.
+
 ```bash
 curl -sS -H 'Host: localhost' -H "X-API-Key: $KEY" \
   'http://127.0.0.1:8084/api/v1/verdicts?limit=50&model=llm'
@@ -204,9 +211,40 @@ policy permits it. Demo mode and API IP-redaction mode continue to omit that
 field. IP-redaction mode also omits reasoning, operator notes, and asset
 snapshots as described under **IP exposure**.
 
+For a matched Zeek enrichment, the detail row's `zeek_context.context` contains
+the bounded connection JSON used as untrusted model evidence. Other lookup
+statuses carry provenance but no context. Demo and API IP-redaction modes omit
+the entire Zeek object because free-form Zeek records can repeat endpoint
+addresses that cannot be pseudonymized safely by rewriting two fields.
+
 ```bash
 curl -sS -H 'Host: localhost' -H "X-API-Key: $KEY" \
   http://127.0.0.1:8084/api/v1/verdicts/1
+```
+
+### `GET /api/v1/verdicts/{event_id}/zeek-context`
+
+Repeat the same exact, bounded tuple lookup against the current local Zeek
+index at operator request, then correlate the single matched Zeek connection
+with bounded, allowlisted DNS, HTTP, TLS/certificate, file, and notice records.
+Application records use exact Zeek identifiers. DNS may additionally match a
+recent answer for the same origin host and responder IP within five minutes.
+Response:
+`{generated_at, mode, event_id, stored, live}`. `stored` is the immutable
+enrichment used for the verdict; `live` is the new lookup result. This endpoint
+does not widen the automatic ±5-second window. Missing application-log groups
+remain explicitly absent; the endpoint never infers them from connection
+metadata. The stored verdict and its original connection-only model evidence
+remain immutable.
+
+The alert must have recorded eligible Zeek provenance. Rows that were not
+evaluated or were ineligible return **409**. A disabled dashboard provider
+returns **503**; demo mode and `TRIAGEWALL_API_REDACT_IPS=true` return **403**.
+The route uses the normal read policy and is always served with `no-store`.
+
+```bash
+curl -sS -H 'Host: localhost' -H "X-API-Key: $KEY" \
+  http://127.0.0.1:8084/api/v1/verdicts/1/zeek-context
 ```
 
 ### `GET /api/v1/verdicts/{event_id}/investigation`

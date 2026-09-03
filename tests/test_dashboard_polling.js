@@ -827,6 +827,102 @@ test("source-specific context is derived only from the retained record", () => {
   assert.match(script, /typeof value === "object"\) return null;/);
 });
 
+test("sensor panels interpret evidence instead of leading with implementation fields", () => {
+  const script = readDashboardScript();
+
+  assert.match(script, /function suricataObservation\(verdict, raw\)/);
+  assert.match(script, /What Suricata observed/);
+  assert.match(script, /What this does not prove/);
+  assert.match(script, /A signature match is evidence of the observed pattern/);
+  assert.match(script, /function zeekConnectionAssessment\(connection\)/);
+  assert.match(script, /What Zeek confirmed/);
+  assert.match(script, /How this affects the verdict/);
+  assert.match(script, /independently confirmed the same network flow/);
+  assert.match(script, /Evidence still missing/);
+  assert.match(script, /Technical details/);
+});
+
+test("Suricata evidence renders a useful escaped observation", async () => {
+  const harness = runDashboard({
+    pathname: "/triage/7",
+    detailVerdict: {
+      src_ip: "10.0.0.7",
+      src_port: 51000,
+      dest_ip: "198.51.100.20",
+      dest_port: 80,
+      proto: "TCP",
+      raw_alert: JSON.stringify({
+        app_proto: "http",
+        alert: { action: "allowed", rev: 1, gid: 1 },
+        flow: { bytes_toserver: 340, bytes_toclient: 592 },
+        http: { hostname: "example.test", url: "/download", http_method: "GET" },
+        payload_printable: "<img src=x onerror=alert(1)>",
+      }),
+    },
+  });
+  await harness.settle();
+
+  const html = harness.document.getElementById("detailPageContent").innerHTML;
+  assert.match(html, /Suricata matched this signature on TCP traffic/);
+  assert.match(html, /The alert observed the traffic but did not block it/);
+  assert.match(html, /GET example\.test\/download/);
+  assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/);
+  assert.doesNotMatch(html, /<img src=x onerror=alert\(1\)>/);
+});
+
+test("stored Zeek evidence leads with confirmation and limitations", async () => {
+  const harness = runDashboard({
+    pathname: "/triage/8",
+    detailVerdict: {
+      zeek_context: {
+        eligibility_reason: "eligible",
+        lookup_status: "matched",
+        source_instance: "zeek-local",
+        match_strategy: "exact_tuple_interval",
+        candidate_count: 1,
+        recorded_at: "2026-08-31T00:00:00Z",
+        context: {
+          connections: [{
+            uid: "C1",
+            service: "http",
+            duration: 1,
+            orig_bytes: 340,
+            resp_bytes: 592,
+            conn_state: "SF",
+            missed_bytes: 0,
+            direction: "same_as_alert",
+          }],
+        },
+      },
+    },
+  });
+  await harness.settle();
+
+  const html = harness.document.getElementById("detailPageContent").innerHTML;
+  assert.match(html, /Zeek independently confirmed the same network flow/);
+  assert.match(html, /Connection metadata alone is neutral/);
+  assert.match(html, /Not included in automatic enrichment/);
+  assert.match(html, /Investigate further with Zeek/);
+  assert.doesNotMatch(html, /<dt>Eligibility<\/dt>/);
+});
+
+test("Zeek context is summarized safely and deeper lookup stays exact", () => {
+  const script = readDashboardScript();
+
+  assert.match(script, /function zeekPanelMarkup\(zeek/);
+  assert.match(script, /id="zeekContextPanel"/);
+  assert.match(script, /Not evaluated\. Zeek enrichment was disabled/);
+  assert.match(script, /JSON\.stringify\(context, null, 2\)/);
+  assert.match(script, /<pre class="raw-event">\$\{escapeHtml\(contextJson\)\}<\/pre>/);
+  assert.match(
+    script,
+    /\/api\/v1\/verdicts\/\$\{eventId\}\/zeek-context/,
+  );
+  assert.match(script, /Investigate further with Zeek/);
+  assert.match(script, /bounded linked DNS, HTTP, TLS, file, and notice evidence/);
+  assert.doesNotMatch(script, /window_before_seconds|window_after_seconds/);
+});
+
 test("a deep link still loads the detail view on the initial load", async () => {
   const harness = runDashboard({ pathname: "/triage/7" });
   await harness.settle();

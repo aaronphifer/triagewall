@@ -55,8 +55,10 @@ from triagewall.dashboard.api.v1.models import (
     RelatedGroup,
     SensorContext,
     VerdictRow,
+    ZeekContext,
 )
 from triagewall.time_utils import format_utc_timestamp
+from triagewall.zeek_context import ZeekLookupResult, ZeekLookupStatus
 
 
 class ApiV1Tests(unittest.TestCase):
@@ -119,6 +121,7 @@ class ApiV1Tests(unittest.TestCase):
         self.old_keys = dashboard.auth_state.keys
         self.old_secret = dashboard.auth_state.dashboard_write_secret
         self.old_allow = dashboard.auth_state.allow_unauthenticated_reads
+        self.old_zeek_provider = dashboard.ZEEK_CONTEXT_PROVIDER
 
         dashboard.DB_PATH = self.db_path
         dashboard.MODE = "local"
@@ -146,6 +149,7 @@ class ApiV1Tests(unittest.TestCase):
         dashboard.auth_state.keys = self.old_keys
         dashboard.auth_state.dashboard_write_secret = self.old_secret
         dashboard.auth_state.allow_unauthenticated_reads = self.old_allow
+        dashboard.ZEEK_CONTEXT_PROVIDER = self.old_zeek_provider
         services.reset_caches()
         self.temp_dir.cleanup()
 
@@ -183,6 +187,80 @@ class ApiV1Tests(unittest.TestCase):
     def test_verdict_detail_returns_404_for_unknown_event(self):
         response = self.client.get("/api/v1/verdicts/99999", headers=self.host)
         self.assertEqual(response.status_code, 404)
+
+    def test_zeek_summary_detail_and_operator_refresh_are_bounded(self):
+        context_json = json.dumps({"connections": [{"uid": "C-live"}]})
+        conn = sqlite3.connect(self.db_path)
+        conn.execute(
+            """UPDATE triage_events
+               SET src_port = 51000, dest_port = 443, proto = 'TCP'
+               WHERE id = 1"""
+        )
+        conn.execute(
+            """INSERT INTO zeek_alert_enrichment (
+                   triage_event_id, eligibility_reason, lookup_status,
+                   source_instance, match_strategy, record_count,
+                   candidate_count, truncated, context_json, recorded_at
+               ) VALUES (1, 'eligible', 'matched', 'zeek-local',
+                         'exact_tuple_interval', 1, 1, 0, ?, ?)""",
+            (context_json, "2026-08-27T00:00:00.000000Z"),
+        )
+        conn.commit()
+        conn.close()
+        provider = unittest.mock.Mock()
+        provider.lookup_deep.return_value = ZeekLookupResult(
+            status=ZeekLookupStatus.MATCHED,
+            context_json=context_json,
+            source_instance="zeek-local",
+            match_strategy="exact_tuple_interval",
+            record_count=1,
+            candidate_count=1,
+        )
+        dashboard.ZEEK_CONTEXT_PROVIDER = provider
+
+        listed = self.client.get(
+            "/api/v1/verdicts?limit=3", headers=self.host
+        ).json()["verdicts"]
+        list_row = next(row for row in listed if row["id"] == 1)
+        self.assertEqual(list_row["zeek_context"]["lookup_status"], "matched")
+        self.assertIsNone(list_row["zeek_context"]["context"])
+        legacy_row = next(
+            row
+            for row in self.client.get(
+                "/api/verdicts?limit=3", headers=self.host
+            ).json()["verdicts"]
+            if row["id"] == 1
+        )
+        self.assertNotIn("zeek_context", legacy_row)
+
+        detail = self.client.get(
+            "/api/v1/verdicts/1", headers=self.host
+        ).json()["verdict"]
+        self.assertEqual(
+            detail["zeek_context"]["context"]["connections"][0]["uid"],
+            "C-live",
+        )
+
+        refreshed = self.client.get(
+            "/api/v1/verdicts/1/zeek-context", headers=self.host
+        )
+        self.assertEqual(refreshed.status_code, 200)
+        self.assertEqual(refreshed.headers["Cache-Control"], "private, no-store")
+        self.assertEqual(
+            refreshed.json()["live"]["context"]["connections"][0]["uid"],
+            "C-live",
+        )
+        provider.lookup_deep.assert_called_once()
+
+    def test_live_zeek_context_fails_closed_under_redaction(self):
+        dashboard.ZEEK_CONTEXT_PROVIDER = unittest.mock.Mock()
+        dashboard.API_REDACT_IPS = True
+
+        response = self.client.get(
+            "/api/v1/verdicts/1/zeek-context", headers=self.host
+        )
+
+        self.assertEqual(response.status_code, 403)
 
     def test_legacy_verdicts_still_combined(self):
         payload = self.client.get("/api/verdicts", headers=self.host).json()
@@ -1533,6 +1611,18 @@ class ApiV1Tests(unittest.TestCase):
             (SensorContext, {"source": "suricata", "nope": 1}),
             (AgentContext, {"id": "000", "nope": 1}),
             (AssetContext, {"source": None, "nope": 1}),
+            (
+                ZeekContext,
+                {
+                    "eligibility_reason": "eligible",
+                    "lookup_status": "no_match",
+                    "record_count": 0,
+                    "candidate_count": 0,
+                    "truncated": False,
+                    "recorded_at": "2026-08-27T00:00:00Z",
+                    "nope": 1,
+                },
+            ),
         ):
             with self.subTest(model=model.__name__):
                 with self.assertRaises(PydanticValidationError):

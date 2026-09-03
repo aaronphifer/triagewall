@@ -98,10 +98,17 @@ def create_legacy_router(
                 cursor=None,
             )
         stats_dict, _generated = services.get_cached_stats(db_factory)
+        legacy_verdicts = []
+        for row in rows:
+            legacy_row = row_to_dict(row)
+            # Zeek provenance is a v1 addition. Keep the deprecated wire shape
+            # frozen even when the underlying query can see the companion row.
+            legacy_row.pop("zeek_context", None)
+            legacy_verdicts.append(legacy_row)
         payload = {
             "mode": get_mode(),
             "stats": LegacyStatsModel.model_validate(stats_dict).model_dump(),
-            "verdicts": [row_to_dict(r) for r in rows],
+            "verdicts": legacy_verdicts,
         }
         return cached_json_response(request, payload, max_age=5)
 

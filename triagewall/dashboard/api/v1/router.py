@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -42,8 +43,14 @@ from triagewall.dashboard.api.v1.models import (
     VerdictFilter,
     VerdictDetailResponse,
     VerdictsResponse,
+    ZeekContextResponse,
 )
 from triagewall.time_utils import utc_now_iso
+from triagewall.zeek_context import (
+    ZeekLookupRequest,
+    ZeekLookupResult,
+    ZeekLookupStatus,
+)
 
 
 def create_v1_router(
@@ -58,6 +65,7 @@ def create_v1_router(
     redact_ips: Callable[[], bool],
     get_ip_secret: Callable[[], bytes | None] = lambda: None,
     config_writes_enabled: Callable[[], bool] = lambda: False,
+    get_zeek_context_provider: Callable[[], object | None] = lambda: None,
 ) -> APIRouter:
     """Build the v1 router with injected app dependencies."""
     router = APIRouter(prefix="/api/v1", tags=["v1"])
@@ -223,6 +231,107 @@ def create_v1_router(
             request,
             payload,
             model=VerdictDetailResponse,
+            max_age=0,
+            no_store=True,
+        )
+
+    @router.get(
+        "/verdicts/{event_id}/zeek-context",
+        response_model=ZeekContextResponse,
+    )
+    def get_live_zeek_context(
+        request: Request,
+        event_id: int,
+        _auth: AuthContext = Depends(require_read),
+    ):
+        """Run exact tuple and bounded UID-linked lookup at operator request."""
+        if get_mode() == "demo" or redact_ips():
+            raise HTTPException(
+                status_code=403,
+                detail="Zeek context is unavailable while event data is redacted",
+            )
+        provider = get_zeek_context_provider()
+        if provider is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Zeek enrichment is not enabled for the dashboard",
+            )
+        with db_factory(readonly=True) as conn:
+            row = services.fetch_verdict(conn, event_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="event not found")
+        stored = row_to_dict(row).get("zeek_context")
+        if stored is None:
+            raise HTTPException(
+                status_code=409,
+                detail="this event was not evaluated for Zeek enrichment",
+            )
+        if stored["eligibility_reason"] != "eligible":
+            raise HTTPException(
+                status_code=409,
+                detail="this event was not eligible for a Zeek lookup",
+            )
+        try:
+            lookup_request = ZeekLookupRequest(
+                alert_timestamp=row["timestamp"],
+                src_ip=row["src_ip"],
+                src_port=row["src_port"],
+                dest_ip=row["dest_ip"],
+                dest_port=row["dest_port"],
+                proto=row["proto"],
+            )
+            deep_lookup = getattr(provider, "lookup_deep", None)
+            raw_result = (
+                deep_lookup(lookup_request)
+                if callable(deep_lookup)
+                else provider.lookup(lookup_request)
+            )
+        except Exception:
+            result = ZeekLookupResult(status=ZeekLookupStatus.UNAVAILABLE)
+        else:
+            try:
+                raw_status = getattr(raw_result, "status", None)
+                result = ZeekLookupResult(
+                    status=ZeekLookupStatus(
+                        getattr(raw_status, "value", raw_status)
+                    ),
+                    context_json=getattr(raw_result, "context_json", None),
+                    source_instance=getattr(raw_result, "source_instance", None),
+                    match_strategy=getattr(raw_result, "match_strategy", None),
+                    record_count=getattr(raw_result, "record_count", 0),
+                    candidate_count=getattr(raw_result, "candidate_count", 0),
+                    truncated=getattr(raw_result, "truncated", False),
+                )
+            except Exception:
+                result = ZeekLookupResult(
+                    status=ZeekLookupStatus.INVALID_RESPONSE
+                )
+        live = {
+            "eligibility_reason": "eligible",
+            "lookup_status": result.status.value,
+            "source_instance": result.source_instance,
+            "match_strategy": result.match_strategy,
+            "record_count": result.record_count,
+            "candidate_count": result.candidate_count,
+            "truncated": result.truncated,
+            "recorded_at": utc_now_iso(),
+            "context": (
+                json.loads(result.context_json)
+                if result.context_json is not None
+                else None
+            ),
+        }
+        payload = {
+            "generated_at": utc_now_iso(),
+            "mode": "local",
+            "event_id": event_id,
+            "stored": stored,
+            "live": live,
+        }
+        return validated_json_response(
+            request,
+            payload,
+            model=ZeekContextResponse,
             max_age=0,
             no_store=True,
         )

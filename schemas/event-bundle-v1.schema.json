@@ -1,0 +1,405 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://triagewall.dev/schemas/event-bundle-v1.schema.json",
+  "title": "TriageWall event bundle v1",
+  "description": "Strict Core-to-Lab replay envelope. Cross-field hashes and canonical embedded JSON are additionally enforced by triagewall.event_bundle.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "version",
+    "bundle_id",
+    "created_at",
+    "core_version",
+    "exporter_revision",
+    "event_count",
+    "content_sha256",
+    "redaction",
+    "revisions",
+    "model",
+    "events"
+  ],
+  "properties": {
+    "schema": {"const": "triagewall.event-bundle"},
+    "version": {"const": 1},
+    "bundle_id": {"$ref": "#/$defs/safeIdentifier"},
+    "created_at": {"$ref": "#/$defs/timestamp"},
+    "core_version": {"$ref": "#/$defs/safeIdentifier"},
+    "exporter_revision": {"$ref": "#/$defs/digest"},
+    "event_count": {"type": "integer", "minimum": 1, "maximum": 1000},
+    "content_sha256": {"$ref": "#/$defs/digest"},
+    "redaction": {"$ref": "#/$defs/redaction"},
+    "revisions": {"$ref": "#/$defs/revisions"},
+    "model": {"$ref": "#/$defs/model"},
+    "events": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1000,
+      "items": {"$ref": "#/$defs/event"}
+    }
+  },
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "nullableDigest": {
+      "oneOf": [
+        {"$ref": "#/$defs/digest"},
+        {"type": "null"}
+      ]
+    },
+    "safeIdentifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+-]{0,127}$"
+    },
+    "nullableSafeIdentifier": {
+      "oneOf": [
+        {"$ref": "#/$defs/safeIdentifier"},
+        {"type": "null"}
+      ]
+    },
+    "timestamp": {
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?Z$"
+    },
+    "nullableText": {
+      "oneOf": [
+        {"type": "string", "minLength": 1, "maxLength": 2000},
+        {"type": "null"}
+      ]
+    },
+    "verdict": {
+      "enum": ["real", "false_positive", "uncertain"]
+    },
+    "redaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy",
+        "policy_revision",
+        "transformations",
+        "operator_feedback_included"
+      ],
+      "properties": {
+        "policy": {"$ref": "#/$defs/safeIdentifier"},
+        "policy_revision": {"$ref": "#/$defs/digest"},
+        "transformations": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "agent_identifiers_pseudonymized",
+              "operator_feedback_excluded",
+              "operator_feedback_included",
+              "private_addresses_preserved",
+              "private_addresses_pseudonymized",
+              "raw_sensor_event_excluded",
+              "sensor_instance_pseudonymized"
+            ]
+          }
+        },
+        "operator_feedback_included": {"type": "boolean"}
+      }
+    },
+    "revisions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "prompt_template",
+        "response_contract",
+        "evidence_projection",
+        "prefilter_policy",
+        "asset_inventory"
+      ],
+      "properties": {
+        "prompt_template": {"$ref": "#/$defs/digest"},
+        "response_contract": {"$ref": "#/$defs/digest"},
+        "evidence_projection": {"$ref": "#/$defs/digest"},
+        "prefilter_policy": {"$ref": "#/$defs/digest"},
+        "asset_inventory": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "digest",
+        "inference_options_json",
+        "inference_options_sha256"
+      ],
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 256},
+        "digest": {"$ref": "#/$defs/nullableDigest"},
+        "inference_options_json": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 8192,
+          "contentMediaType": "application/json"
+        },
+        "inference_options_sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event_id",
+        "sensor_event",
+        "provenance",
+        "model_projection",
+        "asset_context",
+        "prefilter",
+        "zeek",
+        "historical_result",
+        "labels",
+        "operator_feedback"
+      ],
+      "properties": {
+        "event_id": {"$ref": "#/$defs/safeIdentifier"},
+        "sensor_event": {"$ref": "#/$defs/sensorEvent"},
+        "provenance": {"$ref": "#/$defs/provenance"},
+        "model_projection": {
+          "$ref": "#/$defs/modelProjection"
+        },
+        "asset_context": {
+          "$ref": "#/$defs/assetContext"
+        },
+        "prefilter": {"$ref": "#/$defs/prefilter"},
+        "zeek": {"$ref": "#/$defs/zeek"},
+        "historical_result": {"$ref": "#/$defs/historicalResult"},
+        "labels": {
+          "oneOf": [
+            {"$ref": "#/$defs/labels"},
+            {"type": "null"}
+          ]
+        },
+        "operator_feedback": {
+          "oneOf": [
+            {"$ref": "#/$defs/operatorFeedback"},
+            {"type": "null"}
+          ]
+        }
+      }
+    },
+    "sensorEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "source",
+        "timestamp",
+        "signature_id",
+        "signature",
+        "flow_id",
+        "src_ip",
+        "src_port",
+        "dest_ip",
+        "dest_port",
+        "proto",
+        "in_iface",
+        "pkt_src",
+        "category",
+        "severity",
+        "action"
+      ],
+      "properties": {
+        "schema_version": {"const": 1},
+        "source": {"enum": ["suricata", "wazuh"]},
+        "timestamp": {"$ref": "#/$defs/timestamp"},
+        "signature_id": {"type": "integer", "minimum": 1, "maximum": 9223372036854775807},
+        "signature": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "flow_id": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "maximum": 9223372036854775807
+        },
+        "src_ip": {"type": ["string", "null"], "maxLength": 45},
+        "src_port": {"type": ["integer", "null"], "minimum": 0, "maximum": 65535},
+        "dest_ip": {"type": ["string", "null"], "maxLength": 45},
+        "dest_port": {"type": ["integer", "null"], "minimum": 0, "maximum": 65535},
+        "proto": {
+          "type": ["string", "null"],
+          "pattern": "^[A-Z][A-Z0-9._-]{0,31}$"
+        },
+        "in_iface": {"$ref": "#/$defs/nullableText"},
+        "pkt_src": {"$ref": "#/$defs/nullableText"},
+        "category": {"$ref": "#/$defs/nullableText"},
+        "severity": {"type": ["integer", "null"], "minimum": 1, "maximum": 255},
+        "action": {"$ref": "#/$defs/nullableText"}
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_instance", "source_event_id", "agent_id", "agent_name"],
+      "properties": {
+        "source_instance": {"$ref": "#/$defs/safeIdentifier"},
+        "source_event_id": {"$ref": "#/$defs/nullableText"},
+        "agent_id": {"$ref": "#/$defs/nullableText"},
+        "agent_name": {"$ref": "#/$defs/nullableText"}
+      }
+    },
+    "modelProjection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "content", "sha256"],
+      "properties": {
+        "format": {"const": "text/plain"},
+        "content": {"type": "string", "minLength": 1, "maxLength": 65536},
+        "sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "assetContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "content", "sha256"],
+      "properties": {
+        "format": {"const": "triagewall.asset-context.v1+json"},
+        "content": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 65536,
+          "contentMediaType": "application/json"
+        },
+        "sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "prefilter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome", "verdict", "reason", "policy_revision"],
+      "properties": {
+        "outcome": {"enum": ["model", "resolved"]},
+        "verdict": {
+          "oneOf": [
+            {"const": "false_positive"},
+            {"type": "null"}
+          ]
+        },
+        "reason": {"$ref": "#/$defs/nullableText"},
+        "policy_revision": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "zeek": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["automatic", "operator"],
+      "properties": {
+        "automatic": {"$ref": "#/$defs/zeekLayer"},
+        "operator": {
+          "oneOf": [
+            {"$ref": "#/$defs/zeekLayer"},
+            {"type": "null"}
+          ]
+        }
+      }
+    },
+    "zeekLayer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lookup_status",
+        "eligibility_reason",
+        "source_instance",
+        "match_strategy",
+        "record_count",
+        "candidate_count",
+        "truncated",
+        "context_json",
+        "context_sha256"
+      ],
+      "properties": {
+        "lookup_status": {
+          "enum": ["disabled", "matched", "no_match", "ambiguous", "unavailable", "invalid_response"]
+        },
+        "eligibility_reason": {
+          "enum": ["eligible", "prefilter_resolved", "unsupported_source", "missing_endpoint", "unsupported_protocol", "missing_port"]
+        },
+        "source_instance": {"$ref": "#/$defs/nullableSafeIdentifier"},
+        "match_strategy": {"$ref": "#/$defs/nullableSafeIdentifier"},
+        "record_count": {"type": "integer", "minimum": 0, "maximum": 32},
+        "candidate_count": {"type": "integer", "minimum": 0, "maximum": 33},
+        "truncated": {"type": "boolean"},
+        "context_json": {
+          "type": ["string", "null"],
+          "maxLength": 65536,
+          "contentMediaType": "application/json"
+        },
+        "context_sha256": {"$ref": "#/$defs/nullableDigest"}
+      }
+    },
+    "historicalResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model_response",
+        "model_response_sha256",
+        "validation_status",
+        "validation_reason",
+        "final_verdict",
+        "confidence",
+        "reasoning",
+        "model_used"
+      ],
+      "properties": {
+        "model_response": {"type": ["string", "null"], "maxLength": 65536},
+        "model_response_sha256": {"$ref": "#/$defs/nullableDigest"},
+        "validation_status": {"enum": ["accepted", "rejected", "not_applicable"]},
+        "validation_reason": {"$ref": "#/$defs/nullableText"},
+        "final_verdict": {"$ref": "#/$defs/verdict"},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "reasoning": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "model_used": {"type": "string", "minLength": 1, "maxLength": 256}
+      }
+    },
+    "labels": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["human_verdict", "condition_labels", "notes"],
+      "properties": {
+        "human_verdict": {"$ref": "#/$defs/verdict"},
+        "condition_labels": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["no_zeek", "connection_only", "connection_plus_application"],
+          "properties": {
+            "no_zeek": {"$ref": "#/$defs/conditionLabel"},
+            "connection_only": {"$ref": "#/$defs/conditionLabel"},
+            "connection_plus_application": {"$ref": "#/$defs/conditionLabel"}
+          }
+        },
+        "notes": {"$ref": "#/$defs/nullableText"}
+      }
+    },
+    "conditionLabel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["zeek_contribution", "allowed_zeek_facts"],
+      "properties": {
+        "zeek_contribution": {
+          "enum": ["material", "corroborative", "conflicting", "uninformative", "unavailable"]
+        },
+        "allowed_zeek_facts": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 2000}
+        }
+      }
+    },
+    "operatorFeedback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision", "note", "reviewed_at"],
+      "properties": {
+        "decision": {"enum": ["agree", "real", "false_positive", "uncertain"]},
+        "note": {"$ref": "#/$defs/nullableText"},
+        "reviewed_at": {"$ref": "#/$defs/timestamp"}
+      }
+    }
+  }
+}

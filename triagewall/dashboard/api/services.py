@@ -562,7 +562,15 @@ SELECT events.id, events.timestamp, events.src_ip, events.src_port,
        sensor.source_instance AS sensor_instance,
        sensor.source_event_id AS sensor_event_id,
        sensor.agent_id AS sensor_agent_id,
-       sensor.agent_name AS sensor_agent_name
+       sensor.agent_name AS sensor_agent_name,
+       zeek.eligibility_reason AS zeek_eligibility_reason,
+       zeek.lookup_status AS zeek_lookup_status,
+       zeek.source_instance AS zeek_source_instance,
+       zeek.match_strategy AS zeek_match_strategy,
+       zeek.record_count AS zeek_record_count,
+       zeek.candidate_count AS zeek_candidate_count,
+       zeek.truncated AS zeek_truncated,
+       zeek.recorded_at AS zeek_recorded_at
 FROM triage_events AS events
 LEFT JOIN asset_snapshots AS src_snapshot
   ON src_snapshot.id = events.src_asset_snapshot_id
@@ -570,11 +578,16 @@ LEFT JOIN asset_snapshots AS dest_snapshot
   ON dest_snapshot.id = events.dest_asset_snapshot_id
 LEFT JOIN sensor_event_context AS sensor
   ON sensor.triage_event_id = events.id
+LEFT JOIN zeek_alert_enrichment AS zeek
+  ON zeek.triage_event_id = events.id
 """
 
 _VERDICT_DETAIL_SELECT = _VERDICT_SELECT.replace(
     "events.reasoning, events.model_used, events.processed_at,",
     "events.reasoning, events.raw_alert, events.model_used, events.processed_at,",
+).replace(
+    "zeek.recorded_at AS zeek_recorded_at",
+    "zeek.recorded_at AS zeek_recorded_at, zeek.context_json AS zeek_context_json",
 )
 
 
