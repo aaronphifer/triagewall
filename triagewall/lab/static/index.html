@@ -11,16 +11,16 @@
   <div id="login-view" class="login-shell">
     <main class="login-card" aria-labelledby="login-title">
       <div class="brand-mark" aria-hidden="true">TW<span>/L</span></div>
-      <p class="eyebrow">Isolated evaluation environment</p>
+      <p class="eyebrow">Safe testing area</p>
       <h1 id="login-title">TriageWall Lab</h1>
-      <p class="lede">Replay evidence. Compare candidates. Keep experiments outside production.</p>
+      <p class="lede">Test a proposed TriageWall change without changing what Core does.</p>
       <form id="login-form">
         <label for="api-key">Lab access key</label>
         <input id="api-key" name="api-key" type="password" autocomplete="current-password" required>
         <button class="primary full" type="submit">Enter the Lab</button>
         <p id="login-error" class="form-error" role="alert"></p>
       </form>
-      <p class="boundary-note">Lab cannot change a Core verdict or deploy a candidate.</p>
+      <p class="boundary-note">Nothing tested here can change a Core verdict or deploy itself.</p>
     </main>
   </div>
 
@@ -31,12 +31,15 @@
         <div><strong>TriageWall Lab</strong><small>Private evaluation</small></div>
       </div>
       <nav aria-label="Lab sections">
-        <button class="nav-item active" data-view="overview"><span>01</span>Overview</button>
-        <button class="nav-item" data-view="bundles"><span>02</span>Bundles</button>
-        <button class="nav-item" data-view="candidates"><span>03</span>Candidates</button>
-        <button class="nav-item" data-view="experiments"><span>04</span>Experiments</button>
-        <button class="nav-item" data-view="results"><span>05</span>Results</button>
-        <button class="nav-item" data-view="reports"><span>06</span>Promotion report</button>
+        <button class="nav-item active" data-view="overview"><span>01</span>Home</button>
+        <button class="nav-item" data-view="experiments"><span>02</span>Run tests</button>
+        <button class="nav-item" data-view="reports"><span>03</span>Test results</button>
+        <details class="advanced-nav">
+          <summary>Advanced details</summary>
+          <button class="nav-item" data-view="results">Individual results</button>
+          <button class="nav-item" data-view="bundles">Evidence bundles</button>
+          <button class="nav-item" data-view="candidates">Model candidates</button>
+        </details>
       </nav>
       <div class="sidebar-foot">
         <div class="isolation"><i></i><span>Lab-only boundary</span></div>
@@ -47,8 +50,8 @@
     <main class="workspace">
       <header class="topbar">
         <div>
-          <p class="eyebrow" id="section-kicker">Evaluation workspace</p>
-          <h1 id="section-title">Overview</h1>
+          <p class="eyebrow" id="section-kicker">Safe testing area</p>
+          <h1 id="section-title">Home</h1>
         </div>
         <div class="operator-block"><span>Operator</span><strong id="operator-name">—</strong></div>
       </header>
@@ -56,41 +59,45 @@
       <div id="notice" class="notice" role="status" hidden></div>
 
       <section class="view active" data-panel="overview">
-        <div class="hero-grid">
-          <article class="hero-panel">
-            <p class="eyebrow">Experiment 01</p>
-            <h2>Does explicit Zeek guidance produce better evidence use?</h2>
-            <p>Compare the current Core prompt with a candidate that must explain what Zeek changed—or say that it only corroborated the flow.</p>
-            <button class="primary" data-go="experiments">Review experiments</button>
-          </article>
-          <article class="boundary-panel">
-            <span class="status-pill safe">Isolated</span>
-            <h3>No production authority</h3>
-            <p>Lab results are experimental evidence. They never overwrite an operational verdict, prompt, model, or policy.</p>
+        <div class="home-intro">
+          <div>
+            <p class="eyebrow">Start here</p>
+            <h2>Test changes without risking Core</h2>
+            <p>Lab compares the current behavior with one proposed change, then tells you whether it is ready, needs work, or is unsafe.</p>
+          </div>
+          <span class="status-pill safe">Isolated from Core</span>
+        </div>
+        <div class="decision-grid">
+          <article id="latest-decision" class="decision-card" aria-live="polite"></article>
+          <article class="panel next-test-card">
+            <p class="eyebrow">Run another test</p>
+            <h3>Use an installed test</h3>
+            <p class="muted">Choose a test, review the number of model calls, and start it. Lab handles the comparison and report.</p>
+            <button class="primary" data-go="experiments">Choose a test</button>
           </article>
         </div>
-        <div id="status-cards" class="stat-grid" aria-live="polite"></div>
-        <div class="split-grid">
-          <article class="panel">
-            <div class="panel-head"><div><p class="eyebrow">Workflow</p><h3>From evidence to decision</h3></div></div>
-            <ol class="workflow">
-              <li><b>Import</b><span>Validate sanitized event evidence.</span></li>
-              <li><b>Compare</b><span>Replay identical inputs through both candidates.</span></li>
-              <li><b>Inspect</b><span>Separate quality, evidence use, safety, and latency.</span></li>
-              <li><b>Decide</b><span>A human reviews gates before any Core change.</span></li>
-            </ol>
+        <article class="panel simple-workflow">
+          <div class="panel-head"><div><p class="eyebrow">How it works</p><h3>One change, three steps</h3></div></div>
+          <ol class="workflow">
+            <li><b>1. Choose</b><span>Select the proposed change you want to test.</span></li>
+            <li><b>2. Run</b><span>Lab compares it against current behavior using the same alerts.</span></li>
+            <li><b>3. Decide</b><span>Read a plain-language result and recommended next action.</span></li>
+          </ol>
+        </article>
+        <details class="advanced-details system-details">
+          <summary>Advanced system details</summary>
+          <div id="status-cards" class="stat-grid" aria-live="polite"></div>
+          <article class="panel boundary-panel">
+            <div class="panel-head"><div><p class="eyebrow">Safety boundary</p><h3>No production authority</h3></div><span class="status-pill safe">Bounded</span></div>
+            <p class="muted">Only the isolated worker can reach the model. Lab results never overwrite an operational verdict, prompt, model, or policy.</p>
           </article>
-          <article class="panel">
-            <div class="panel-head"><div><p class="eyebrow">Runner state</p><h3>Dedicated worker</h3></div><span class="status-pill safe">Bounded</span></div>
-            <p class="muted">The UI queues exact experiment digests. Only the isolated worker can reach the model, and partial or interrupted runs remain hidden.</p>
-          </article>
-        </div>
+        </details>
       </section>
 
       <section class="view" data-panel="bundles">
         <div class="section-actions">
-          <p>Sanitized, versioned event evidence imported into Lab's immutable store.</p>
-          <button class="primary" data-import="bundles">Import bundle</button>
+          <p>Advanced: sanitized alert sets used to test every proposed change consistently.</p>
+          <button class="primary" data-import="bundles">Import evidence bundle</button>
           <input type="file" data-file="bundles" accept="application/json,.json" hidden>
         </div>
         <div id="bundles-list" class="artifact-list"></div>
@@ -98,8 +105,8 @@
 
       <section class="view" data-panel="candidates">
         <div class="section-actions">
-          <p>Exact model, prompt, response, and inference revisions installed by the operator.</p>
-          <button class="primary" data-import="candidates">Install candidate</button>
+          <p>Advanced: exact model and prompt revisions installed for comparison.</p>
+          <button class="primary" data-import="candidates">Install model candidate</button>
           <input type="file" data-file="candidates" accept="application/json,.json" hidden>
         </div>
         <div id="candidates-list" class="artifact-list"></div>
@@ -107,27 +114,27 @@
 
       <section class="view" data-panel="experiments">
         <div class="section-actions">
-          <p>Paired comparisons bound to installed bundle and candidate digests.</p>
-          <button class="primary" data-import="experiments">Install experiment</button>
+          <p>Choose the change you want Lab to compare with current TriageWall behavior.</p>
+          <button class="secondary" data-import="experiments">Install a test</button>
           <input type="file" data-file="experiments" accept="application/json,.json" hidden>
         </div>
-        <div class="runner-banner"><span>Execution boundary</span><p>Queue an installed digest for the isolated worker. Each result is a paired baseline/candidate comparison; completed evidence and its aggregate report appear automatically.</p></div>
+        <div class="runner-banner"><span>Safe to run</span><p>Tests call the private model but cannot change Core. You will see the number of model calls before confirming.</p></div>
         <div id="experiments-list" class="artifact-list"></div>
-        <div class="subsection-head"><p class="eyebrow">Worker queue</p><h2>Runs</h2></div>
+        <div class="subsection-head"><p class="eyebrow">Progress</p><h2>Recent test runs</h2></div>
         <div id="jobs-list" class="artifact-list"></div>
       </section>
 
       <section class="view" data-panel="results">
-        <div class="section-actions"><p>Side-by-side evidence from completed paired trials. Showing up to 200 recent pairs.</p></div>
+        <div class="section-actions"><p>Advanced: individual model responses from completed comparisons. Showing up to 200 recent pairs.</p></div>
         <div id="results-list" class="results-list"></div>
       </section>
 
       <section class="view" data-panel="reports">
         <div class="section-actions">
-          <p>Sanitized aggregate gates for a human release decision.</p>
-          <span class="status-pill safe">Generated from complete runs</span>
+          <p>What each test established, what needs attention, and what to do next.</p>
+          <span class="status-pill safe">Complete runs only</span>
         </div>
-        <div class="production-warning"><strong>Passing does not authorize production.</strong><span>Core still requires a reviewed change, normal gates, and explicit deployment.</span></div>
+        <div class="production-warning"><strong>Lab recommends; you decide.</strong><span>Even a passing result still requires a reviewed change and explicit Core deployment.</span></div>
         <div id="reports-list" class="artifact-list"></div>
       </section>
     </main>

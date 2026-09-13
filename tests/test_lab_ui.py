@@ -381,7 +381,9 @@ class LabUiTests(unittest.TestCase):
                 )
 
     def test_frontend_avoids_browser_credential_storage_and_html_sinks(self):
-        script = (ROOT / "triagewall" / "lab" / "static" / "lab.js").read_text()
+        static_root = ROOT / "triagewall" / "lab" / "static"
+        script = (static_root / "lab.js").read_text()
+        page = (static_root / "index.html").read_text()
         for forbidden in ("localStorage", "sessionStorage", "innerHTML", "outerHTML"):
             self.assertNotIn(forbidden, script)
         for safety_signal in (
@@ -390,6 +392,19 @@ class LabUiTests(unittest.TestCase):
             "Zeek claimed when absent",
         ):
             self.assertIn(safety_signal, script)
+        for primary_label in ("Home", "Run tests", "Test results"):
+            self.assertIn(f">{primary_label}<", page)
+        self.assertIn('<details class="advanced-nav">', page)
+        self.assertIn('<article id="latest-decision"', page)
+        for decision_label in ("Passed", "Needs work", "Unsafe"):
+            self.assertIn(decision_label, script)
+        for plain_language_label in (
+            "What worked",
+            "What needs attention",
+            "Recommended next step",
+            "Advanced metrics and gate evidence",
+        ):
+            self.assertIn(plain_language_label, script)
 
     def test_compose_lab_profile_has_no_core_mount_or_service_dependency(self):
         compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))

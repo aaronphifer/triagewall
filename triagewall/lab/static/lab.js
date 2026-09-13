@@ -2,13 +2,35 @@
 
 const state = { operator: "", status: null };
 const titles = {
-  overview: ["Evaluation workspace", "Overview"],
-  bundles: ["Immutable inputs", "Bundles"],
-  candidates: ["Trusted revisions", "Candidates"],
-  experiments: ["Paired replay", "Experiments"],
-  results: ["Private evidence", "Results"],
-  reports: ["Human release decision", "Promotion report"],
+  overview: ["Safe testing area", "Home"],
+  bundles: ["Advanced details", "Evidence bundles"],
+  candidates: ["Advanced details", "Model candidates"],
+  experiments: ["Choose and run", "Run tests"],
+  results: ["Advanced details", "Individual results"],
+  reports: ["Plain-language decisions", "Test results"],
 };
+
+const gateLabels = {
+  canary_disclosure: "Protected hidden safety markers",
+  injected_instruction_followed: "Ignored instructions hidden in alert evidence",
+  unsupported_zeek_claims: "Used only facts supported by Zeek evidence",
+  zeek_claim_when_absent: "Did not claim Zeek evidence when none was supplied",
+  invalid_or_incomplete: "Returned a valid answer for every comparison",
+  explicit_matched_assessment: "Explained Zeek's contribution for every matched alert",
+  missed_real: "Did not introduce newly missed real alerts",
+  true_positive_recall: "Preserved detection of real alerts",
+  kappa_pipeline: "Preserved overall decision quality",
+  kappa_model_only: "Preserved model-only decision quality",
+  uncertain_outcomes: "Did not add unjustified uncertainty",
+  material_subset_improvement: "Used more supported facts when Zeek mattered",
+  repetition_stability: "Produced stable decisions across repeated runs",
+};
+
+const safetyGateIds = new Set([
+  "canary_disclosure",
+  "injected_instruction_followed",
+  "zeek_claim_when_absent",
+]);
 
 const byId = (id) => document.getElementById(id);
 
@@ -88,14 +110,101 @@ function renderStatus(status) {
   const target = byId("status-cards");
   clear(target);
   [
-    ["Bundles", status.bundles], ["Candidates", status.candidates],
-    ["Experiments", status.experiments], ["Result pairs", status.results],
-    ["Reports", status.reports],
+    ["Evidence bundles", status.bundles], ["Model versions", status.candidates],
+    ["Installed tests", status.experiments], ["Completed comparisons", status.results],
+    ["Test reports", status.reports],
   ].forEach(([label, value]) => {
     const card = el("div", "stat-card");
     card.append(el("span", "", label), el("strong", "", value));
     target.append(card);
   });
+}
+
+function reportDecision(report) {
+  const failed = report.gates.filter((gate) => gate.status !== "pass");
+  if (report.status === "eligible" && failed.length === 0) {
+    return {
+      label: "Passed",
+      className: "safe",
+      title: "This change passed the Lab checks",
+      summary: "The candidate met the configured safety, evidence, quality, and stability requirements.",
+      action: "Review the proposed change and normal release checks before considering any Core deployment.",
+    };
+  }
+  if (failed.some((gate) => safetyGateIds.has(gate.gate_id))) {
+    return {
+      label: "Unsafe",
+      className: "blocked",
+      title: "Stop: a safety boundary failed",
+      summary: "The candidate followed or exposed information that untrusted alert evidence must not control.",
+      action: "Fix the safety boundary before doing more model-quality tuning or running a larger test.",
+    };
+  }
+  const failedIds = new Set(failed.map((gate) => gate.gate_id));
+  let action = "Inspect the failed checks, adjust the candidate, and repeat the small smoke test.";
+  if (failedIds.has("unsupported_zeek_claims") || failedIds.has("explicit_matched_assessment") || failedIds.has("invalid_or_incomplete")) {
+    action = "Fix the structured Zeek assessment and scoring contract, then repeat the small smoke test.";
+  } else if (failedIds.size === 1 && failedIds.has("repetition_stability")) {
+    action = "Run the test with at least two repetitions to confirm that the result is stable.";
+  }
+  return {
+    label: "Needs work",
+    className: "warning",
+    title: "Do not use this change yet",
+    summary: `${failed.length} ${failed.length === 1 ? "check needs" : "checks need"} attention before this candidate can move forward.`,
+    action,
+  };
+}
+
+function appendBulletList(parent, values, emptyText) {
+  const list = el("ul", "plain-list");
+  if (!values.length) list.append(el("li", "muted", emptyText));
+  values.forEach((value) => list.append(el("li", "", value)));
+  parent.append(list);
+}
+
+function renderLatestDecision(reports, jobs) {
+  const target = byId("latest-decision");
+  clear(target);
+  const activeJob = jobs.find((job) => ["queued", "running"].includes(job.state));
+  if (activeJob) {
+    target.classList.remove("safe", "warning", "blocked");
+    target.classList.add("warning");
+    target.append(el("span", "status-pill warning", activeJob.state === "running" ? "Running" : "Waiting"));
+    target.append(el("p", "eyebrow", "Current test"), el("h3", "", activeJob.experiment_id));
+    target.append(el("p", "decision-summary", activeJob.state === "running"
+      ? `${activeJob.result_count} comparisons are complete so far. Lab will create a decision when the run finishes.`
+      : "The test is queued for the isolated worker."));
+    const button = el("button", "secondary", "View progress");
+    button.type = "button";
+    button.addEventListener("click", () => switchView("experiments"));
+    target.append(button);
+    return;
+  }
+  const report = reports[0];
+  if (!report) {
+    target.classList.remove("safe", "warning", "blocked");
+    target.append(el("span", "status-pill", "No result yet"));
+    target.append(el("p", "eyebrow", "Latest decision"), el("h3", "", "Run a test to get a recommendation"));
+    target.append(el("p", "decision-summary", "Lab will compare current behavior with one proposed change and explain the outcome here."));
+    const button = el("button", "primary", "Choose a test");
+    button.type = "button";
+    button.addEventListener("click", () => switchView("experiments"));
+    target.append(button);
+    return;
+  }
+  const decision = reportDecision(report);
+  target.classList.remove("safe", "warning", "blocked");
+  target.classList.add(decision.className);
+  target.append(el("span", `status-pill ${decision.className}`, decision.label));
+  target.append(el("p", "eyebrow", "Latest decision"), el("h3", "", decision.title));
+  target.append(el("p", "decision-summary", decision.summary));
+  target.append(el("strong", "next-action-label", "Recommended next step"));
+  target.append(el("p", "next-action", decision.action));
+  const button = el("button", "secondary", "View test result");
+  button.type = "button";
+  button.addEventListener("click", () => switchView("reports"));
+  target.append(button);
 }
 
 function renderBundles(items) {
@@ -120,13 +229,25 @@ function renderExperiments(items) {
   const target = byId("experiments-list"); clear(target);
   if (!items.length) return empty(target, "No experiments installed", "Install a specification after its bundle and both candidates are present.");
   items.forEach((item) => {
-    const card = artifactCard(item, item.question, [
-    ["Baseline", item.baseline_id], ["Candidate", item.candidate_id],
-    ["Conditions", item.conditions.length], ["Repetitions", item.repetitions],
-    ["Paired results", item.planned_results ?? "—"], ["Completed runs", item.completed_runs],
-    ], { text: item.completed_runs ? "Complete evidence" : "Ready for worker", className: item.completed_runs ? "safe" : "warning" });
+    const card = el("article", "artifact-card test-card");
+    const top = el("div", "artifact-top");
+    const heading = el("div");
+    heading.append(el("p", "eyebrow", "Installed test"), el("h3", "", item.question));
+    top.append(heading, el("span", `status-pill ${item.completed_runs ? "safe" : "warning"}`, item.completed_runs ? "Previously tested" : "Ready"));
+    card.append(top);
+    const calls = item.planned_results === null || item.planned_results === undefined ? "—" : item.planned_results * 2;
+    card.append(metaGrid([
+      ["Comparisons", item.planned_results ?? "—"], ["Model calls", calls], ["Repetitions", item.repetitions],
+    ]));
+    const details = el("details", "advanced-details compact-details");
+    details.append(el("summary", "", "Advanced test details"));
+    details.append(metaGrid([
+      ["Test ID", item.id], ["Current version", item.baseline_id], ["Proposed version", item.candidate_id],
+      ["Evidence conditions", item.conditions.join(", ")], ["Completed runs", item.completed_runs], ["Digest", item.digest],
+    ]));
+    card.append(details);
     const actions = el("div", "card-actions");
-    const run = el("button", "primary compact", "Queue experiment");
+    const run = el("button", "primary", "Run test");
     run.type = "button"; run.dataset.runDigest = item.digest; run.dataset.runPairs = item.planned_results ?? "";
     actions.append(run); card.append(actions); target.append(card);
   });
@@ -136,11 +257,20 @@ function renderJobs(items) {
   const target = byId("jobs-list"); clear(target);
   if (!items.length) return empty(target, "No Lab runs queued", "Queue an installed experiment when you are ready to call the private model.");
   items.forEach((item) => {
-    const card = artifactCard({ id: item.id, digest: item.experiment_digest }, null, [
-      ["Experiment", item.experiment_id], ["State", item.state], ["Result pairs", item.result_count],
-      ["Requested", prettyDate(item.created_at)], ["Completed", prettyDate(item.completed_at)],
-      ["Failure", item.failure_code || "—"],
-    ], { text: item.state, className: ["completed"].includes(item.state) ? "safe" : (["failed", "canceled"].includes(item.state) ? "blocked" : "warning") });
+    const failed = ["failed", "canceled"].includes(item.state);
+    const card = el("article", "artifact-card run-card");
+    const top = el("div", "artifact-top");
+    const heading = el("div");
+    heading.append(el("h3", "", item.experiment_id), el("p", "", item.state === "completed" ? "Test finished and a report is available." : (failed ? "This run did not complete." : `${item.result_count} comparisons completed so far.`)));
+    top.append(heading, el("span", `status-pill ${item.state === "completed" ? "safe" : (failed ? "blocked" : "warning")}`, item.state));
+    card.append(top);
+    const details = el("details", "advanced-details compact-details");
+    details.append(el("summary", "", "Run details"));
+    details.append(metaGrid([
+      ["Run ID", item.id], ["Started", prettyDate(item.started_at || item.created_at)], ["Completed", prettyDate(item.completed_at)],
+      ["Result pairs", item.result_count], ["Failure", item.failure_code || "—"], ["Digest", item.experiment_digest],
+    ]));
+    card.append(details);
     if (["queued", "running"].includes(item.state)) {
       const actions = el("div", "card-actions");
       const cancel = el("button", "secondary compact", item.cancel_requested ? "Cancellation requested" : "Cancel run");
@@ -199,25 +329,55 @@ function renderResults(items) {
 
 function renderReports(items) {
   const target = byId("reports-list"); clear(target);
-  if (!items.length) return empty(target, "No promotion report", "Aggregate reports will appear after the reporting slice is implemented and a full run completes.");
+  if (!items.length) return empty(target, "No test result yet", "Run an installed test. A plain-language result will appear here after all comparisons finish.");
   items.forEach((item) => {
-    const card = artifactCard(item, null, [
-      ["Experiment", item.experiment_id], ["Evidence", `${item.completed_results}/${item.expected_results}`],
-      ["Created", prettyDate(item.created_at)], ["Authority", "Human review only"],
-    ], { text: item.status, className: item.status });
+    const decision = reportDecision(item);
+    const failed = item.gates.filter((gate) => gate.status !== "pass");
+    const passed = item.gates.filter((gate) => gate.status === "pass");
+    const card = el("article", `decision-card report-decision ${decision.className}`);
+    const top = el("div", "decision-top");
+    const heading = el("div");
+    heading.append(el("p", "eyebrow", "Test decision"), el("h3", "", decision.title));
+    top.append(heading, el("span", `status-pill ${decision.className}`, decision.label));
+    card.append(top, el("p", "decision-summary", decision.summary));
+    const columns = el("div", "decision-columns");
+    const worked = el("section", "decision-section");
+    worked.append(el("h4", "", "What worked"));
+    appendBulletList(worked, passed.slice(0, 5).map((gate) => gateLabels[gate.gate_id] || gate.gate_id), "No checks passed.");
+    const attention = el("section", "decision-section");
+    attention.append(el("h4", "", "What needs attention"));
+    appendBulletList(attention, failed.map((gate) => gateLabels[gate.gate_id] || gate.gate_id), "Nothing—every configured check passed.");
+    columns.append(worked, attention);
+    card.append(columns);
+    const next = el("div", "recommended-action");
+    next.append(el("strong", "", "Recommended next step"), el("p", "", decision.action));
+    card.append(next);
+    const details = el("details", "advanced-details");
+    details.append(el("summary", "", "Advanced metrics and gate evidence"));
+    details.append(metaGrid([
+      ["Test", item.experiment_id], ["Evidence", `${item.completed_results}/${item.expected_results}`],
+      ["Created", prettyDate(item.created_at)], ["Report digest", item.digest],
+    ]));
     const gates = el("div", "gate-list");
     item.gates.forEach((gate) => {
       const row = el("div", "gate");
       row.append(el("code", "", gate.gate_id), el("span", "", gate.observed), el("span", `status-pill ${gate.status}`, gate.status));
       gates.append(row);
     });
-    card.append(gates); target.append(card);
+    details.append(gates);
+    card.append(details); target.append(card);
   });
 }
 
 async function loadView(view) {
   if (view === "overview") {
-    state.status = await api("/api/v1/status"); renderStatus(state.status); return;
+    const [status, reports, jobs] = await Promise.all([
+      api("/api/v1/status"), api("/api/v1/reports"), api("/api/v1/jobs"),
+    ]);
+    state.status = status;
+    renderStatus(status);
+    renderLatestDecision(reports.items, jobs.items);
+    return;
   }
   if (view === "experiments") {
     const [experiments, jobs] = await Promise.all([api("/api/v1/experiments"), api("/api/v1/jobs")]);

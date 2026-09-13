@@ -335,13 +335,25 @@ authenticated, attributable, explicit action.
 
 ## User interface
 
-The first interface needs five bounded views:
+The primary interface answers four operator questions: what was tested, whether
+it worked, what failed, and what should happen next. It exposes three primary
+views:
 
-- **Bundles:** validation state, provenance, label coverage, and digest.
-- **Candidates:** immutable components and baseline comparison.
-- **Experiments:** queued/running/completed state with exact identities.
-- **Results:** side-by-side event outcomes and separately grouped metrics.
-- **Promotion report:** blocking gates, human-review items, and export action.
+- **Home:** latest plain-language decision, active-run progress, and recommended
+  next action.
+- **Run tests:** installed test questions, disclosed comparison/model-call scope,
+  confirmation, and recent progress.
+- **Test results:** Passed, Needs work, or Unsafe decisions with human-readable
+  explanations of what worked and what needs attention.
+
+Implementation-level evidence remains available but is visually subordinate
+under **Advanced details**:
+
+- **Evidence bundles:** validation state, provenance, label coverage, and digest.
+- **Model candidates:** immutable components and baseline comparison.
+- **Individual results:** side-by-side event outcomes and scoring signals.
+- Each test decision can expand its raw gate observations, exact identities, and
+  digest without forcing those details into the normal workflow.
 
 Every result page must state that Lab output is experimental and did not change
 an operational verdict. Raw private event evidence is never included in a
