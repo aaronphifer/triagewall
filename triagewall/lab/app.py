@@ -24,6 +24,7 @@ from triagewall.lab.auth import (
     LabLoginThrottle,
 )
 from triagewall.lab.jobs import LabJobError, LabJobRepository
+from triagewall.lab_package import MAX_TEST_PACKAGE_BYTES
 from triagewall.lab.store import LabStore, LabStoreError
 from triagewall.lab_contracts import (
     CANDIDATE_SCHEMA,
@@ -334,6 +335,16 @@ def create_app(
             return store.import_contract(
                 EXPERIMENT_SCHEMA,
                 await _bounded_body(request, MAX_LAB_CONTRACT_BYTES),
+            )
+        except (LabStoreError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)[:300]) from exc
+
+    @app.post("/api/v1/test-packages")
+    async def import_test_package(request: Request):
+        require_mutation(request)
+        try:
+            return store.import_test_package(
+                await _bounded_body(request, MAX_TEST_PACKAGE_BYTES)
             )
         except (LabStoreError, ValueError) as exc:
             raise HTTPException(status_code=422, detail=str(exc)[:300]) from exc

@@ -114,11 +114,17 @@
 
       <section class="view" data-panel="experiments">
         <div class="section-actions">
-          <p>Choose the change you want Lab to compare with current TriageWall behavior.</p>
-          <button class="secondary" data-import="experiments">Install a test</button>
-          <input type="file" data-file="experiments" accept="application/json,.json" hidden>
+          <p>Install one test package, then choose the change you want Lab to compare with current TriageWall behavior.</p>
+          <button class="primary" id="choose-test-package">Install test package</button>
+          <input type="file" id="test-package-file" accept="application/json,.json" hidden>
         </div>
         <div class="runner-banner"><span>Safe to run</span><p>Tests call the private model but cannot change Core. You will see the number of model calls before confirming.</p></div>
+        <details class="advanced-details install-details">
+          <summary>Advanced: install individual test files</summary>
+          <p class="muted">Use this only for custom or diagnostic work. Install the evidence bundle and both candidates first, then install the experiment specification.</p>
+          <button class="secondary compact" data-import="experiments">Install experiment specification</button>
+          <input type="file" data-file="experiments" accept="application/json,.json" hidden>
+        </details>
         <div id="experiments-list" class="artifact-list"></div>
         <div class="subsection-head"><p class="eyebrow">Progress</p><h2>Recent test runs</h2></div>
         <div id="jobs-list" class="artifact-list"></div>
@@ -139,6 +145,25 @@
       </section>
     </main>
   </div>
+
+  <dialog id="package-preview" class="package-dialog" aria-labelledby="package-preview-title">
+    <form method="dialog" class="package-dialog-card">
+      <p class="eyebrow">Review before installing</p>
+      <h2 id="package-preview-title">Install this test?</h2>
+      <p id="package-question" class="package-question"></p>
+      <div id="package-summary" class="meta-grid"></div>
+      <div class="package-change">
+        <span>Proposed change</span>
+        <strong id="package-candidate"></strong>
+        <p id="package-rationale"></p>
+      </div>
+      <p class="boundary-note">Installing adds immutable Lab-only test files. It does not run the model, change Core, or authorize deployment.</p>
+      <div class="dialog-actions">
+        <button class="secondary" id="cancel-package-install" type="button">Cancel</button>
+        <button class="primary" id="confirm-package-install" type="button">Install test</button>
+      </div>
+    </form>
+  </dialog>
   <script src="/static/lab.js" defer></script>
 </body>
 </html>

@@ -16,6 +16,7 @@ from triagewall.event_bundle import (
     canonical_json,
     load_event_bundle_bytes,
 )
+from triagewall.lab_package import load_test_package_bytes
 from triagewall.lab_contracts import (
     CANDIDATE_SCHEMA,
     EXPERIMENT_SCHEMA,
@@ -189,6 +190,43 @@ class LabStore:
             raise LabStoreError("unsupported contract type")
         stored = self._store(kind, document)
         return {**stored, "artifact": summary(document)}
+
+    def import_test_package(self, payload: bytes) -> dict[str, Any]:
+        """Install a validated bundle, comparison pair, and experiment together."""
+
+        package = load_test_package_bytes(payload)
+        artifacts = (
+            ("bundles", package["bundle"]),
+            ("candidates", package["baseline_candidate"]),
+            ("candidates", package["candidate"]),
+            ("experiments", package["experiment"]),
+        )
+        additional = 0
+        for kind, document in artifacts:
+            path = self._artifact_path(kind, document["content_sha256"])
+            if not path.exists():
+                additional += len((canonical_json(document) + "\n").encode("utf-8"))
+        self.ensure_capacity(additional)
+
+        bundle_result = self._store("bundles", package["bundle"])
+        baseline_result = self._store("candidates", package["baseline_candidate"])
+        candidate_result = self._store("candidates", package["candidate"])
+        # The package validator has already proven these exact references. The
+        # store check additionally verifies the newly installed immutable files.
+        self._verify_experiment_bindings(package["experiment"])
+        experiment_result = self._store("experiments", package["experiment"])
+        components = {
+            "bundle": bundle_result["created"],
+            "baseline_candidate": baseline_result["created"],
+            "candidate": candidate_result["created"],
+            "experiment": experiment_result["created"],
+        }
+        return {
+            "created": any(components.values()),
+            "package_digest": package["content_sha256"],
+            "components_created": components,
+            "artifact": self._experiment_summary(package["experiment"]),
+        }
 
     def _contains(self, kind: str, reference: dict[str, str]) -> bool:
         path = self._artifact_path(kind, reference["sha256"])

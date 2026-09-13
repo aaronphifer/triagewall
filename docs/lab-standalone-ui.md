@@ -11,6 +11,8 @@ The standalone Lab service exposes a bounded authenticated interface for:
 
 - importing a fully validated event-bundle v1 document into immutable storage;
 - installing exact candidate and experiment contracts;
+- previewing and installing a complete test from one self-digested package while
+  revalidating every embedded artifact and exact reference;
 - refusing an experiment until its exact bundle and both candidate digests are
   installed;
 - reading only complete private runner output whose manifest, references,

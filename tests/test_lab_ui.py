@@ -31,6 +31,7 @@ from scripts.build_lab_experiment_2 import build_documents
 from triagewall.event_bundle import canonical_json, load_event_bundle_bytes
 from triagewall.lab.app import create_app
 from triagewall.lab.auth import LabAuthSettings, hash_lab_api_key
+from triagewall.lab_package import build_test_package
 from triagewall.lab.store import COMPLETE_MANIFEST
 from triagewall.lab_contracts import REQUIRED_GATE_IDS, content_digest, result_set_digest
 from triagewall.lab_runner import run_experiment
@@ -234,6 +235,56 @@ class LabUiTests(unittest.TestCase):
         self.assertEqual(items[0]["id"], "ui-test-experiment")
         self.assertEqual(items[0]["completed_runs"], 0)
 
+    def test_one_file_package_installs_all_test_dependencies_idempotently(self):
+        self.login()
+        package = build_test_package(
+            self.bundle, self.baseline, self.candidate, self.experiment
+        )
+        headers = {
+            "X-TriageWall-Lab-Request": "1",
+            "content-type": "application/json",
+        }
+        payload = (canonical_json(package) + "\n").encode()
+
+        first = self.client.post("/api/v1/test-packages", content=payload, headers=headers)
+        self.assertEqual(first.status_code, 200, first.text)
+        self.assertTrue(first.json()["created"])
+        self.assertTrue(all(first.json()["components_created"].values()))
+        second = self.client.post("/api/v1/test-packages", content=payload, headers=headers)
+        self.assertEqual(second.status_code, 200, second.text)
+        self.assertFalse(second.json()["created"])
+        self.assertFalse(any(second.json()["components_created"].values()))
+        self.assertEqual(
+            self.client.get("/api/v1/status").json()["experiments"],
+            1,
+        )
+
+    def test_package_rejects_mismatched_embedded_reference_before_installing(self):
+        self.login()
+        package = build_test_package(
+            self.bundle, self.baseline, self.candidate, self.experiment
+        )
+        package["experiment"]["bundle"] = {
+            "id": self.bundle["bundle_id"],
+            "sha256": "sha256:" + "f" * 64,
+        }
+        package["experiment"]["content_sha256"] = content_digest(package["experiment"])
+        package["content_sha256"] = content_digest(package)
+        response = self.client.post(
+            "/api/v1/test-packages",
+            content=(canonical_json(package) + "\n").encode(),
+            headers={
+                "X-TriageWall-Lab-Request": "1",
+                "content-type": "application/json",
+            },
+        )
+        self.assertEqual(response.status_code, 422, response.text)
+        self.assertIn("does not match its embedded artifact", response.json()["detail"])
+        status = self.client.get("/api/v1/status").json()
+        self.assertEqual(status["bundles"], 0)
+        self.assertEqual(status["candidates"], 0)
+        self.assertEqual(status["experiments"], 0)
+
     def test_run_queue_requires_exact_digest_confirmation_and_supports_cancel(self):
         self.install_inputs()
         digest = self.experiment["content_sha256"][7:]
@@ -394,6 +445,10 @@ class LabUiTests(unittest.TestCase):
             self.assertIn(safety_signal, script)
         for primary_label in ("Home", "Run tests", "Test results"):
             self.assertIn(f">{primary_label}<", page)
+        self.assertIn(">Install test package<", page)
+        self.assertIn("Review before installing", page)
+        self.assertIn('const TEST_PACKAGE_SCHEMA = "triagewall.lab-test-package"', script)
+        self.assertIn('api("/api/v1/test-packages"', script)
         self.assertIn('<details class="advanced-nav">', page)
         self.assertIn('<article id="latest-decision"', page)
         for decision_label in ("Passed", "Needs work", "Unsafe"):

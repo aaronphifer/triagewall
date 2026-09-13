@@ -22,6 +22,21 @@ Every document rejects unknown fields and versions, duplicate object keys,
 non-finite numbers, invalid UTF-8, inconsistent cross-field state, and a
 mismatched canonical content digest.
 
+## Test installation package
+
+`triagewall.lab-test-package` is a convenience transport envelope, not a new
+source of authority. It embeds one event bundle, one baseline candidate, one
+proposed candidate, and their experiment so an operator can install a complete
+test from one file. The package has its own canonical content digest.
+
+The package loader independently applies the existing bundle and contract
+validators to every embedded document, then requires the experiment's three
+ID/digest references to match those exact embedded artifacts. The standalone
+Lab performs all validation and a storage-quota preflight before publishing the
+artifacts in dependency order. Installation is idempotent; retrying a package
+after an unexpected filesystem interruption completes any missing immutable
+artifacts without replacing existing ones.
+
 ## Candidate
 
 `triagewall.lab-candidate` is an immutable candidate definition. It contains:
@@ -129,6 +144,7 @@ do not authenticate an author.
 
 | Boundary | v1 limit |
 |---|---:|
+| Complete test installation package | 89 MiB |
 | Any contract document | 8 MiB |
 | Prompt component | 64 KiB UTF-8 |
 | Model response per outcome | 64 KiB UTF-8 |

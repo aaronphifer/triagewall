@@ -1,6 +1,8 @@
 "use strict";
 
-const state = { operator: "", status: null };
+const state = { operator: "", status: null, pendingTestPackage: null };
+const TEST_PACKAGE_SCHEMA = "triagewall.lab-test-package";
+const MAX_TEST_PACKAGE_BYTES = 89 * 1024 * 1024;
 const titles = {
   overview: ["Safe testing area", "Home"],
   bundles: ["Advanced details", "Evidence bundles"],
@@ -423,6 +425,104 @@ async function importFile(kind, file) {
   } catch (error) { showNotice(error.message, true); }
 }
 
+function readPackagePreview(document) {
+  const required = [
+    "schema", "version", "bundle", "baseline_candidate", "candidate",
+    "experiment", "content_sha256",
+  ];
+  if (!document || typeof document !== "object" || Array.isArray(document)) {
+    throw new Error("The test package must contain a JSON object.");
+  }
+  const keys = Object.keys(document).sort();
+  if (keys.length !== required.length || required.some((key) => !keys.includes(key))) {
+    throw new Error("The file is not a complete TriageWall Lab test package.");
+  }
+  if (document.schema !== TEST_PACKAGE_SCHEMA || document.version !== 1) {
+    throw new Error("The file uses an unsupported TriageWall Lab test package format.");
+  }
+  const { bundle, candidate, experiment } = document;
+  if (![bundle, candidate, experiment].every((value) => value && typeof value === "object" && !Array.isArray(value))) {
+    throw new Error("The test package is missing its test details.");
+  }
+  const selectedEvents = Array.isArray(experiment.event_ids)
+    ? experiment.event_ids.length
+    : bundle.event_count;
+  const conditions = Array.isArray(experiment.evidence_conditions)
+    ? experiment.evidence_conditions.length
+    : 0;
+  const repetitions = experiment.repetitions;
+  if (![selectedEvents, conditions, repetitions].every((value) => Number.isInteger(value) && value > 0)) {
+    throw new Error("The test package has an invalid run size.");
+  }
+  const comparisons = selectedEvents * conditions * repetitions;
+  return {
+    question: experiment.question,
+    candidate: candidate.candidate_id,
+    rationale: candidate.rationale,
+    events: selectedEvents,
+    conditions,
+    repetitions,
+    comparisons,
+    modelCalls: comparisons * 2,
+  };
+}
+
+async function previewTestPackage(file) {
+  if (!file) return;
+  if (file.size > MAX_TEST_PACKAGE_BYTES) {
+    showNotice("The test package is too large.", true);
+    return;
+  }
+  try {
+    const document = JSON.parse(await file.text());
+    const preview = readPackagePreview(document);
+    state.pendingTestPackage = file;
+    byId("package-question").textContent = preview.question || "Unnamed test";
+    const summary = byId("package-summary");
+    clear(summary);
+    const previewGrid = metaGrid([
+      ["Alerts", preview.events],
+      ["Evidence conditions", preview.conditions],
+      ["Repetitions", preview.repetitions],
+      ["Comparisons", preview.comparisons],
+      ["Model calls", preview.modelCalls],
+    ]);
+    Array.from(previewGrid.childNodes).forEach((node) => summary.append(node));
+    byId("package-candidate").textContent = preview.candidate || "Unnamed candidate";
+    byId("package-rationale").textContent = preview.rationale || "No rationale supplied.";
+    byId("package-preview").showModal();
+  } catch (error) {
+    state.pendingTestPackage = null;
+    showNotice(error instanceof SyntaxError ? "The test package is not valid JSON." : error.message, true);
+  }
+}
+
+async function installTestPackage() {
+  const file = state.pendingTestPackage;
+  if (!file) return;
+  const button = byId("confirm-package-install");
+  button.disabled = true;
+  button.textContent = "Installing…";
+  try {
+    const result = await api("/api/v1/test-packages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-TriageWall-Lab-Request": "1" },
+      body: file,
+    });
+    state.pendingTestPackage = null;
+    byId("package-preview").close();
+    showNotice(result.created
+      ? "Test installed and ready to run."
+      : "That exact test is already installed and ready to run.");
+    await loadView("experiments");
+  } catch (error) {
+    showNotice(error.message, true);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Install test";
+  }
+}
+
 async function queueExperiment(digest, pairs) {
   const pairCount = Number.parseInt(pairs, 10);
   const detail = Number.isFinite(pairCount) ? `${pairCount} result pairs (${pairCount * 2} model calls)` : "the configured paired comparisons";
@@ -463,6 +563,17 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
   document.querySelectorAll(".nav-item").forEach((node) => node.addEventListener("click", () => switchView(node.dataset.view)));
   document.querySelectorAll("[data-go]").forEach((node) => node.addEventListener("click", () => switchView(node.dataset.go)));
+  byId("choose-test-package").addEventListener("click", () => byId("test-package-file").click());
+  byId("test-package-file").addEventListener("change", async (event) => {
+    await previewTestPackage(event.target.files[0]);
+    event.target.value = "";
+  });
+  byId("confirm-package-install").addEventListener("click", installTestPackage);
+  byId("cancel-package-install").addEventListener("click", () => {
+    state.pendingTestPackage = null;
+    byId("package-preview").close();
+  });
+  byId("package-preview").addEventListener("cancel", () => { state.pendingTestPackage = null; });
   document.querySelectorAll("[data-import]").forEach((button) => button.addEventListener("click", () => document.querySelector(`[data-file="${button.dataset.import}"]`).click()));
   document.querySelectorAll("[data-file]").forEach((input) => input.addEventListener("change", async () => { await importFile(input.dataset.file, input.files[0]); input.value = ""; }));
   byId("experiments-list").addEventListener("click", (event) => {

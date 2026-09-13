@@ -342,7 +342,8 @@ views:
 - **Home:** latest plain-language decision, active-run progress, and recommended
   next action.
 - **Run tests:** installed test questions, disclosed comparison/model-call scope,
-  confirmation, and recent progress.
+  one-file test-package installation with a run-size preview, confirmation, and
+  recent progress. Individual experiment-file installation remains advanced.
 - **Test results:** Passed, Needs work, or Unsafe decisions with human-readable
   explanations of what worked and what needs attention.
 

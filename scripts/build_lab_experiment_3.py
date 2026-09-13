@@ -26,6 +26,7 @@ from triagewall.lab_contracts import (
     ZEEK_ASSESSMENT_RESPONSE_MODE,
     validate_experiment,
 )
+from triagewall.lab_package import build_test_package
 from triagewall.time_utils import format_utc_timestamp
 import triagewall.triage as core_triage
 
@@ -226,6 +227,9 @@ def main(argv=None):
             "baseline.json": baseline,
             "candidate.json": candidate,
             "experiment.json": experiment,
+            "test-package.json": build_test_package(
+                bundle, baseline, candidate, experiment
+            ),
         }
         if any((args.output_dir / name).exists() for name in documents):
             raise ValueError("output files already exist")
@@ -236,7 +240,10 @@ def main(argv=None):
         message = str(exc).replace("\r", " ").replace("\n", " ")[:300]
         print(f"Could not build Lab experiment 3 safely: {message}", file=sys.stderr)
         return 1
-    print(f"Created trusted Lab experiment 3 inputs in {args.output_dir.resolve()}")
+    print(
+        "Created trusted Lab experiment 3 inputs and installable test-package.json "
+        f"in {args.output_dir.resolve()}"
+    )
     return 0
 
 

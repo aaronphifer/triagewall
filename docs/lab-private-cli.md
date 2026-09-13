@@ -43,6 +43,14 @@ conditions × two repetitions = 90 paired results and 180 model calls. Use
 `--repetitions 1` for a non-promotable targeted smoke run. More repetitions may
 still be required after the first two-run stability result is reviewed.
 
+The builder writes `test-package.json` alongside the three individual contract
+files. In the standalone Lab, open **Run tests**, choose **Install test
+package**, review the disclosed run size, and install that single file. The Lab
+strictly validates the package digest, each embedded artifact, and every exact
+cross-reference before storing anything. Reinstalling the same package is safe
+and does not create duplicate artifacts. The separate files remain available
+for advanced CLI and diagnostic use.
+
 ## 3. Run the paired experiment
 
 ```text

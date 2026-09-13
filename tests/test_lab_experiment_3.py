@@ -2,6 +2,7 @@ import argparse
 import base64
 import json
 from pathlib import Path
+import tempfile
 import unittest
 
 from scripts import build_lab_experiment_3
@@ -101,6 +102,33 @@ class LabExperiment3Tests(unittest.TestCase):
             assessment["required"],
             ["contribution", "evidence", "verdict_impact"],
         )
+
+    def test_builder_emits_one_installable_package_with_the_advanced_files(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "experiment"
+            result = build_lab_experiment_3.main(
+                [
+                    "--bundle", str(FIXTURE),
+                    "--output-dir", str(output),
+                    "--author", "unit-test",
+                    "--model-name", "fixture-local-model",
+                    "--model-digest", MODEL_DIGEST,
+                ]
+            )
+
+            self.assertEqual(result, 0)
+            self.assertEqual(
+                {path.name for path in output.iterdir()},
+                {"baseline.json", "candidate.json", "experiment.json", "test-package.json"},
+            )
+            package = build_lab_experiment_3.build_test_package(
+                event_bundle.load_event_bundle_bytes(FIXTURE.read_bytes()),
+                json.loads((output / "baseline.json").read_text(encoding="utf-8")),
+                json.loads((output / "candidate.json").read_text(encoding="utf-8")),
+                json.loads((output / "experiment.json").read_text(encoding="utf-8")),
+            )
+            written = json.loads((output / "test-package.json").read_text(encoding="utf-8"))
+            self.assertEqual(written, package)
 
 
 if __name__ == "__main__":
