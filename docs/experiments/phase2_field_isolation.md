@@ -1,6 +1,6 @@
 ## Phase 2 prompt injection hardening — field isolation (2026-05-25)
 
-Follow-up to [phase1_injection_hardening.md](phase1_injection_hardening.md). Phase 1
+Follow-up to Phase 1 injection hardening (Phase 1 results summarized in [v0.2.1 field isolation design](../v0.2.1-field-isolation-design.md); the standalone `phase1_injection_hardening.md` file is no longer in-tree). Phase 1
 closed canary extraction and response-format attacks but left URL field injection
 fully exploitable. Phase 2 closes that vulnerability via base64-encoded field
 isolation with explicit boundary markers.
