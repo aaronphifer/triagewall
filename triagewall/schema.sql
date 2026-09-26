@@ -95,6 +95,55 @@ ON sensor_event_context (
 )
 WHERE source_event_id IS NOT NULL;
 
+-- Optional Zeek evidence and the policy decision that led to its lookup are
+-- retained separately from the core event. Rows exist only when enrichment
+-- was enabled for that ingest decision; absence means "not evaluated".
+CREATE TABLE IF NOT EXISTS zeek_alert_enrichment (
+    triage_event_id INTEGER PRIMARY KEY,
+    eligibility_reason TEXT NOT NULL CHECK (eligibility_reason IN (
+        'eligible', 'prefilter_resolved', 'unsupported_source',
+        'missing_endpoint', 'unsupported_protocol', 'missing_port'
+    )),
+    lookup_status TEXT NOT NULL CHECK (lookup_status IN (
+        'disabled', 'matched', 'no_match', 'ambiguous', 'unavailable',
+        'invalid_response'
+    )),
+    source_instance TEXT CHECK (
+        source_instance IS NULL OR length(source_instance) BETWEEN 1 AND 128
+    ),
+    match_strategy TEXT CHECK (
+        match_strategy IS NULL OR length(match_strategy) BETWEEN 1 AND 128
+    ),
+    record_count INTEGER NOT NULL CHECK (record_count BETWEEN 0 AND 32),
+    candidate_count INTEGER NOT NULL CHECK (candidate_count BETWEEN 0 AND 33),
+    truncated INTEGER NOT NULL CHECK (truncated IN (0, 1)),
+    context_json TEXT CHECK (
+        context_json IS NULL OR length(CAST(context_json AS BLOB)) <= 65536
+    ),
+    recorded_at TEXT NOT NULL,
+    CHECK (eligibility_reason = 'eligible' OR lookup_status = 'disabled'),
+    CHECK (
+        (
+            lookup_status = 'matched'
+            AND context_json IS NOT NULL
+            AND record_count >= 1
+            AND candidate_count = 1
+        ) OR (
+            lookup_status = 'ambiguous'
+            AND context_json IS NULL
+            AND record_count = 0
+            AND candidate_count >= 2
+        ) OR (
+            lookup_status NOT IN ('matched', 'ambiguous')
+            AND context_json IS NULL
+            AND record_count = 0
+            AND candidate_count = 0
+            AND truncated = 0
+        )
+    ),
+    FOREIGN KEY (triage_event_id) REFERENCES triage_events(id) ON DELETE CASCADE
+);
+
 -- Immutable, canonical operator configuration documents. Content is never
 -- updated in place; lifecycle metadata changes as a revision is validated,
 -- activated, superseded, rejected, or reactivated for rollback.

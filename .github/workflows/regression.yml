@@ -39,26 +39,7 @@ jobs:
           --requirement triagewall/dashboard/requirements.txt
 
       - name: Run unit and security regressions
-        run: >-
-          python -m unittest
-          tests.test_api_v1
-          tests.test_asset_inventory
-          tests.test_config_api
-          tests.test_config_preview_activation
-          tests.test_config_runtime
-          tests.test_database
-          tests.test_db_startup
-          tests.test_dashboard_stats
-          tests.test_gold_gate
-          tests.test_ingest_checkpoint
-          tests.test_operator_config
-          tests.test_prefilter
-          tests.test_retention
-          tests.test_retention_cycle
-          tests.test_runtime_dependencies
-          tests.test_security_regressions
-          tests.test_timestamps
-          tests.test_wazuh_ingest
+        run: python -m unittest discover -s tests
 
       - name: Verify gold-set evidence is current
         # Deterministic Layer 1 only: no Ollama, no GPU, no production data.
@@ -75,9 +56,22 @@ jobs:
         run: python -m compileall -q triagewall tests scripts
 
       - name: Validate Docker Compose
+        env:
+          TRIAGEWALL_LAB_OPERATOR: ci-validation-only
+          TRIAGEWALL_LAB_API_KEY_HASH: ci-validation-only
+          TRIAGEWALL_LAB_SESSION_SECRET: ci-validation-only
+          TRIAGEWALL_LAB_OLLAMA_URL: http://127.0.0.1:11434
         run: |
           docker compose config --quiet
           docker compose -f docker-compose.yml -f docker-compose.wazuh.yml --profile wazuh config --quiet
+          docker compose --profile lab config --quiet
 
       - name: Build Docker services
-        run: docker compose -f docker-compose.yml -f docker-compose.wazuh.yml --profile wazuh build
+        env:
+          TRIAGEWALL_LAB_OPERATOR: ci-validation-only
+          TRIAGEWALL_LAB_API_KEY_HASH: ci-validation-only
+          TRIAGEWALL_LAB_SESSION_SECRET: ci-validation-only
+          TRIAGEWALL_LAB_OLLAMA_URL: http://127.0.0.1:11434
+        run: >-
+          docker compose -f docker-compose.yml -f docker-compose.wazuh.yml
+          --profile wazuh --profile lab build

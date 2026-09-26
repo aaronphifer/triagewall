@@ -1,0 +1,125 @@
+{
+  "schema": "triagewall.event-bundle",
+  "version": 1,
+  "bundle_id": "lab-fixture-suricata-zeek-correlative",
+  "created_at": "2026-08-31T21:00:00.000000Z",
+  "core_version": "v0.5-dev",
+  "exporter_revision": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "event_count": 1,
+  "content_sha256": "sha256:493567b93ad49506bcb1cd7197be7679564254b46c9198920c289cc67e278ee8",
+  "redaction": {
+    "policy": "sanitized-lab-fixture-v1",
+    "policy_revision": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "transformations": [
+      "operator_feedback_excluded",
+      "private_addresses_preserved",
+      "raw_sensor_event_excluded",
+      "sensor_instance_pseudonymized"
+    ],
+    "operator_feedback_included": false
+  },
+  "revisions": {
+    "prompt_template": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "response_contract": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "evidence_projection": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "prefilter_policy": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "asset_inventory": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "model": {
+    "name": "fixture-local-model",
+    "digest": null,
+    "inference_options_json": "{\"num_ctx\":4096,\"num_predict\":512,\"temperature\":0.2}",
+    "inference_options_sha256": "sha256:b1809d30a6f33bc82619d133a09b793104004fb7de6ef4464e9e4b692b3d9295"
+  },
+  "events": [
+    {
+      "event_id": "suricata-zeek-correlative-001",
+      "sensor_event": {
+        "schema_version": 1,
+        "source": "suricata",
+        "timestamp": "2026-08-31T20:20:07.000000Z",
+        "signature_id": 2008933,
+        "signature": "A Network Trojan was detected",
+        "flow_id": 1127761773188374,
+        "src_ip": "192.0.2.10",
+        "src_port": 36332,
+        "dest_ip": "198.51.100.20",
+        "dest_port": 80,
+        "proto": "TCP",
+        "in_iface": "lab0",
+        "pkt_src": "wire",
+        "category": "A Network Trojan was detected",
+        "severity": 1,
+        "action": "allowed"
+      },
+      "provenance": {
+        "source_instance": "sensor-fixture-01",
+        "source_event_id": null,
+        "agent_id": null,
+        "agent_name": null
+      },
+      "model_projection": {
+        "format": "text/plain",
+        "content": "timestamp: 2026-08-31T20:20:07Z\nsignature_id: 2008933\nsignature: A Network Trojan was detected\nsrc_ip: 192.0.2.10\nsrc_port: 36332\ndest_ip: 198.51.100.20\ndest_port: 80\nproto: TCP",
+        "sha256": "sha256:83f84dd13d3ac5139154d10c2c232fa36de9d73cdf766c0599dfeb2e9ea12077"
+      },
+      "asset_context": {
+        "format": "triagewall.asset-context.v1+json",
+        "content": "{\"destination\":null,\"source\":{\"criticality\":\"critical\",\"exposed_ports\":[],\"hostname\":\"lab-client\",\"internet_facing\":false,\"inventory_revision\":\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"ips\":[\"192.0.2.10\"],\"role\":\"test-workstation\"}}",
+        "sha256": "sha256:a1dfee9f146add2d05154cbdbf23498af45cc6d7c0220f18ab22794ebf0c6277"
+      },
+      "prefilter": {
+        "outcome": "model",
+        "verdict": null,
+        "reason": null,
+        "policy_revision": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "zeek": {
+        "automatic": {
+          "lookup_status": "matched",
+          "eligibility_reason": "eligible",
+          "source_instance": "zeek-fixture-01",
+          "match_strategy": "exact_tuple_interval",
+          "record_count": 1,
+          "candidate_count": 1,
+          "truncated": false,
+          "context_json": "{\"connections\":[{\"conn_state\":\"SF\",\"direction\":\"same_as_alert\",\"duration\":1.0,\"end_ts\":\"2026-08-31T20:20:07Z\",\"id.orig_h\":\"192.0.2.10\",\"id.orig_p\":36332,\"id.resp_h\":\"198.51.100.20\",\"id.resp_p\":80,\"missed_bytes\":0,\"orig_bytes\":340,\"orig_pkts\":4,\"proto\":\"tcp\",\"resp_bytes\":592,\"resp_pkts\":3,\"service\":\"http\",\"ts\":\"2026-08-31T20:20:06Z\",\"uid\":\"C-LAB-001\"}],\"schema_version\":1}",
+          "context_sha256": "sha256:4a8d7f94ae8da5f78e2007b86b9bc09ba31cf0109ba7a073abfe1eea7724b32c"
+        },
+        "operator": null
+      },
+      "historical_result": {
+        "model_response": "{\"confidence\":0.8,\"reasoning\":\"The alert indicates potentially malicious HTTP traffic; the Zeek flow completed normally and only corroborates the observed tuple.\",\"verdict\":\"real\"}",
+        "model_response_sha256": "sha256:b90faf2674a6a8d40baaeebf128a0ecc6dac0373d815bca6c81c1f55e436484b",
+        "validation_status": "accepted",
+        "validation_reason": null,
+        "final_verdict": "real",
+        "confidence": 0.8,
+        "reasoning": "The alert indicates potentially malicious HTTP traffic; the Zeek flow completed normally and only corroborates the observed tuple.",
+        "model_used": "fixture-local-model"
+      },
+      "labels": {
+        "human_verdict": "real",
+        "condition_labels": {
+          "no_zeek": {
+            "zeek_contribution": "unavailable",
+            "allowed_zeek_facts": []
+          },
+          "connection_only": {
+            "zeek_contribution": "corroborative",
+            "allowed_zeek_facts": [
+              "Zeek identified the application service as HTTP.",
+              "Zeek observed a completed SF connection with bidirectional bytes and no missed bytes."
+            ]
+          },
+          "connection_plus_application": {
+            "zeek_contribution": "unavailable",
+            "allowed_zeek_facts": []
+          }
+        },
+        "notes": "The connection record corroborates the alert tuple but does not independently prove malicious content."
+      },
+      "operator_feedback": null
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+"""Standalone TriageWall Lab application."""
+

@@ -1476,6 +1476,119 @@ kbd {
   font-size: 0.68rem;
 }
 
+.zeek-context-details {
+  margin-top: 12px;
+}
+
+.zeek-context-details summary {
+  cursor: pointer;
+  color: var(--blue);
+  font-family: var(--mono);
+  font-size: 0.62rem;
+}
+
+.zeek-context-details .raw-event,
+.zeek-context-empty {
+  margin-top: 10px;
+}
+
+.evidence-callout,
+.evidence-contribution,
+.evidence-caution {
+  margin: 10px 0;
+  padding: 12px 14px;
+  border-left: 3px solid var(--blue);
+  background: color-mix(in srgb, var(--blue) 7%, var(--surface));
+}
+
+.evidence-contribution {
+  border-left-color: var(--violet);
+  background: color-mix(in srgb, var(--violet) 7%, var(--surface));
+}
+
+.evidence-caution {
+  border-left-color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 7%, var(--surface));
+}
+
+.evidence-callout strong,
+.evidence-contribution strong,
+.evidence-caution strong,
+.evidence-gap strong,
+.zeek-evidence-group > strong {
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.61rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.evidence-callout p,
+.evidence-contribution p,
+.evidence-caution p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.55;
+}
+
+.evidence-facts {
+  margin-top: 12px;
+}
+
+.evidence-gap {
+  margin: 12px 0 0;
+  color: var(--faint);
+  font-size: 0.68rem;
+  line-height: 1.5;
+}
+
+.sensor-interpretation h4,
+#zeekContextPanel h4 {
+  margin: 14px 0 8px;
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sensor-technical-details {
+  margin-top: 12px;
+}
+
+.sensor-technical-details summary,
+.zeek-context-details summary {
+  cursor: pointer;
+  color: var(--blue);
+  font-family: var(--mono);
+  font-size: 0.62rem;
+}
+
+.sensor-technical-details .detail-grid,
+.zeek-context-details .detail-grid {
+  margin-top: 10px;
+}
+
+.zeek-evidence-groups {
+  display: grid;
+  gap: 8px;
+}
+
+.zeek-evidence-group {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.zeek-evidence-group ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.5;
+}
+
 .integrity-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

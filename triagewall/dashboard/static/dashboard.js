@@ -866,6 +866,73 @@ function derivedField(label, value) {
   return `<div><dt>${escapeHtml(label)}</dt><dd${missing ? ' class="derived-missing"' : ""}>${escapeHtml(missing ? "Not recorded" : value)}</dd></div>`;
 }
 
+function formatEvidenceBytes(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const bytes = Number(value);
+  if (!Number.isFinite(bytes) || bytes < 0) return null;
+  if (bytes < 1024) return `${Math.round(bytes)} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+}
+
+function formatEvidenceDuration(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds) || seconds < 0) return null;
+  if (seconds < 1) return `${Math.round(seconds * 1000)} ms`;
+  if (seconds < 60) return `${seconds.toFixed(seconds < 10 ? 2 : 1)} s`;
+  return `${(seconds / 60).toFixed(1)} min`;
+}
+
+function suricataObservation(verdict, raw) {
+  const source = verdict.src_ip
+    ? `${verdict.src_ip}:${verdict.src_port ?? "?"}`
+    : "an unrecorded source";
+  const destination = verdict.dest_ip
+    ? `${verdict.dest_ip}:${verdict.dest_port ?? "?"}`
+    : "an unrecorded destination";
+  const protocol = verdict.proto ? String(verdict.proto).toUpperCase() : "network";
+  const application = readRawScalar(raw, ["app_proto"]);
+  const action = readRawScalar(raw, ["alert", "action"]);
+  const parts = [
+    `Suricata matched this signature on ${protocol} traffic from ${source} to ${destination}.`,
+  ];
+  if (application) parts.push(`It identified the application protocol as ${application}.`);
+  if (action === "allowed") {
+    parts.push("The alert observed the traffic but did not block it.");
+  } else if (action === "blocked") {
+    parts.push("Suricata reports that the traffic was blocked.");
+  }
+  return parts.join(" ");
+}
+
+function suricataApplicationFields(raw) {
+  const fields = [];
+  const httpHost = readRawScalar(raw, ["http", "hostname"]);
+  const httpUrl = readRawScalar(raw, ["http", "url"]);
+  const httpMethod = readRawScalar(raw, ["http", "http_method"]);
+  const httpStatus = readRawScalar(raw, ["http", "status"]);
+  const userAgent = readRawScalar(raw, ["http", "http_user_agent"]);
+  const dnsName = readRawScalar(raw, ["dns", "rrname"]);
+  const dnsType = readRawScalar(raw, ["dns", "rrtype"]);
+  const tlsSni = readRawScalar(raw, ["tls", "sni"]);
+  const tlsVersion = readRawScalar(raw, ["tls", "version"]);
+  const printablePayload = readRawScalar(raw, ["payload_printable"]);
+  if (httpHost || httpUrl) {
+    fields.push(["HTTP request", `${httpMethod ?? "request"} ${httpHost ?? ""}${httpUrl ?? ""}`.trim()]);
+  }
+  if (httpStatus) fields.push(["HTTP status", httpStatus]);
+  if (userAgent) fields.push(["User agent", userAgent]);
+  if (dnsName) fields.push(["DNS question", `${dnsName}${dnsType ? ` (${dnsType})` : ""}`]);
+  if (tlsSni) fields.push(["TLS server name", tlsSni]);
+  if (tlsVersion) fields.push(["TLS version", tlsVersion]);
+  if (printablePayload) {
+    const sample = String(printablePayload);
+    fields.push(["Payload sample", sample.length > 240 ? `${sample.slice(0, 240)}…` : sample]);
+  }
+  return fields;
+}
+
 // Wazuh manager/location/decoder/groups and the Suricata flow envelope are not
 // columns; they exist only inside the retained sensor record. They are read
 // from the record this response already returned, so demo mode and IP
@@ -901,7 +968,38 @@ function renderSourceContext(verdict, sensor) {
       ["Rule action", readRawScalar(raw, ["alert", "action"])],
       ["Rule revision", readRawScalar(raw, ["alert", "rev"])],
       ["Rule GID", readRawScalar(raw, ["alert", "gid"])],
+      ["Community flow ID", readRawScalar(raw, ["community_id"])],
+      ["Packet direction", readRawScalar(raw, ["direction"])],
+      ["Flow state", readRawScalar(raw, ["flow", "state"])],
+      ["Flow end reason", readRawScalar(raw, ["flow", "reason"])],
+      ["Packets to server", readRawScalar(raw, ["flow", "pkts_toserver"])],
+      ["Packets to client", readRawScalar(raw, ["flow", "pkts_toclient"])],
+      ["Bytes to server", formatEvidenceBytes(readRawScalar(raw, ["flow", "bytes_toserver"]))],
+      ["Bytes to client", formatEvidenceBytes(readRawScalar(raw, ["flow", "bytes_toclient"]))],
     ];
+  if (sensor === "suricata") {
+    const applicationFields = suricataApplicationFields(raw);
+    return `
+      <section class="detail-section sensor-interpretation">
+        <h3>Suricata evidence</h3>
+        <div class="evidence-callout">
+          <strong>What Suricata observed</strong>
+          <p>${escapeHtml(suricataObservation(verdict, raw))}</p>
+        </div>
+        ${applicationFields.length ? `
+          <h4>Recorded application evidence</h4>
+          <dl class="detail-grid detail-facts">${applicationFields.map(([label, value]) => derivedField(label, value)).join("")}</dl>` : `
+          <p class="evidence-gap"><strong>Application evidence unavailable.</strong> This alert record contains no HTTP, DNS, or TLS metadata to explain the signature further.</p>`}
+        <div class="evidence-caution">
+          <strong>What this does not prove</strong>
+          <p>A signature match is evidence of the observed pattern; by itself it does not prove compromise, intent, or successful execution.</p>
+        </div>
+        <details class="sensor-technical-details">
+          <summary>Technical details</summary>
+          <dl class="detail-grid detail-facts">${fields.map(([label, value]) => derivedField(label, value)).join("")}</dl>
+        </details>
+      </section>`;
+  }
   return `
     <section class="detail-section">
       <h3>${escapeHtml(title)}</h3>
@@ -995,6 +1093,171 @@ function renderInvestigationUnavailable() {
   if (relatedHost) relatedHost.innerHTML = `<h3>Related activity</h3>${message}`;
 }
 
+function zeekStatusLabel(value) {
+  return String(value ?? "not evaluated").replaceAll("_", " ");
+}
+
+const ZEEK_CONN_STATES = {
+  SF: "Established and closed normally",
+  S0: "Connection attempt with no reply",
+  REJ: "Connection attempt rejected",
+  RSTO: "Reset by the originator",
+  RSTR: "Reset by the responder",
+  RSTOS0: "Originator sent SYN then reset",
+  RSTRH: "Responder sent SYN-ACK then reset",
+  SH: "Originator sent SYN then FIN",
+  SHR: "Responder sent SYN-ACK then FIN",
+  OTH: "Connection state not otherwise classified",
+};
+
+function zeekConnectionAssessment(connection) {
+  if (!connection || typeof connection !== "object" || Array.isArray(connection)) return null;
+  const state = connection.conn_state
+    ? ZEEK_CONN_STATES[connection.conn_state] ?? connection.conn_state
+    : null;
+  const service = connection.service ? String(connection.service).toUpperCase() : null;
+  const direction = connection.direction === "reversed_from_alert"
+    ? "Zeek recorded the flow in the reverse orientation from the alert"
+    : "Zeek recorded the same source-to-destination direction as the alert";
+  const summaryParts = ["Zeek independently confirmed the same network flow inside the alert window."];
+  if (state) summaryParts.push(`${state}.`);
+  if (service) summaryParts.push(`Zeek identified the service as ${service}.`);
+  const missed = Number(connection.missed_bytes);
+  const effect = Number.isFinite(missed) && missed > 0
+    ? `This corroborates that the traffic occurred, but Zeek missed ${formatEvidenceBytes(missed)} of stream data, so the evidence is incomplete.`
+    : "This corroborates that the traffic occurred. Connection metadata alone is neutral about whether the activity was malicious.";
+  return {
+    summary: summaryParts.join(" "),
+    effect,
+    fields: [
+      ["Flow direction", direction],
+      ["Connection outcome", state],
+      ["Detected service", service],
+      ["Duration", formatEvidenceDuration(connection.duration)],
+      ["Sent by originator", formatEvidenceBytes(connection.orig_bytes)],
+      ["Returned by responder", formatEvidenceBytes(connection.resp_bytes)],
+      ["Originator packets", connection.orig_pkts],
+      ["Responder packets", connection.resp_pkts],
+      ["Missed stream bytes", formatEvidenceBytes(connection.missed_bytes)],
+    ],
+  };
+}
+
+function zeekEvidenceRows(context, key) {
+  return Array.isArray(context?.[key])
+    ? context[key].filter((item) => item && typeof item === "object" && !Array.isArray(item))
+    : [];
+}
+
+function zeekEvidenceSummary(context) {
+  const groups = [
+    ["dns", "DNS", (row) => `${row.query ?? "Unknown query"}${Array.isArray(row.answers) && row.answers.length ? ` → ${row.answers.join(", ")}` : ""}`],
+    ["http", "HTTP", (row) => `${row.method ?? "Request"} ${row.host ?? ""}${row.uri ?? ""}${row.status_code ? ` → ${row.status_code}` : ""}`.trim()],
+    ["tls", "TLS", (row) => `${row.server_name ?? "Unnamed server"}${row.version ? ` · ${row.version}` : ""}${row.established === true ? " · established" : ""}`],
+    ["certificates", "Certificate", (row) => `${row["certificate.subject"] ?? "Unknown subject"}${row["certificate.issuer"] ? ` · issuer ${row["certificate.issuer"]}` : ""}`],
+    ["files", "File", (row) => `${row.filename ?? row.mime_type ?? "Observed file"}${row.sha256 ? ` · SHA-256 ${row.sha256}` : ""}`],
+    ["notices", "Zeek notice", (row) => `${row.note ?? "Notice"}${row.msg ? ` · ${row.msg}` : ""}`],
+  ];
+  const available = [];
+  const missing = [];
+  const markup = [];
+  for (const [key, label, describe] of groups) {
+    const rows = zeekEvidenceRows(context, key);
+    if (!rows.length) {
+      missing.push(label);
+      continue;
+    }
+    available.push(label);
+    markup.push(`
+      <div class="zeek-evidence-group">
+        <strong>${escapeHtml(label)}</strong>
+        <ul>${rows.map((row) => `<li>${escapeHtml(describe(row))}</li>`).join("")}</ul>
+      </div>`);
+  }
+  return { available, missing, markup: markup.join("") };
+}
+
+function zeekPanelMarkup(zeek, { live = false } = {}) {
+  if (!zeek) {
+    return `
+      <h3>Zeek network context</h3>
+      <p class="detail-empty">Not evaluated. Zeek enrichment was disabled or this alert predates the integration.</p>`;
+  }
+  const eligible = zeek.eligibility_reason === "eligible";
+  const context = zeek.context && typeof zeek.context === "object" ? zeek.context : null;
+  const contextJson = context ? JSON.stringify(context, null, 2) : null;
+  const connection = Array.isArray(context?.connections) ? context.connections[0] : null;
+  const assessment = zeekConnectionAssessment(connection);
+  const application = zeekEvidenceSummary(context);
+  const action = mode === "local" && eligible
+    ? `<button class="text-button" type="button" data-refresh-zeek>${live ? "Refresh Zeek investigation" : "Investigate further with Zeek"}</button>`
+    : "";
+  const status = zeek.lookup_status;
+  const noMatch = status !== "matched" || !assessment;
+  return `
+    <div class="raw-head">
+      <div><h3>Zeek network context</h3><p>${live ? "Fresh exact match plus bounded linked DNS, HTTP, TLS, file, and notice evidence." : "Independent network evidence recorded with this verdict."}</p></div>
+      ${action}
+    </div>
+    ${noMatch ? `<p class="detail-empty">${escapeHtml(status === "no_match" ? "Zeek did not record an exact connection for this alert tuple and time window." : `Zeek lookup status: ${zeekStatusLabel(status)}.`)}</p>` : `
+      <div class="evidence-callout">
+        <strong>What Zeek confirmed</strong>
+        <p>${escapeHtml(assessment.summary)}</p>
+      </div>
+      <div class="evidence-contribution">
+        <strong>How this affects the verdict</strong>
+        <p>${escapeHtml(assessment.effect)}</p>
+      </div>
+      <dl class="detail-grid detail-facts evidence-facts">
+        ${assessment.fields.map(([label, value]) => derivedField(label, value)).join("")}
+      </dl>
+      ${application.available.length ? `
+        <h4>Correlated application evidence</h4>
+        <div class="zeek-evidence-groups">${application.markup}</div>` : ""}
+      <p class="evidence-gap"><strong>${live ? "Evidence still missing" : "Not included in automatic enrichment"}:</strong> ${escapeHtml(application.missing.length ? application.missing.join(", ") : "none from the enabled Zeek sources")}.${zeek.truncated ? " Additional linked records were omitted by the evidence safety limit." : ""}</p>`}
+    ${contextJson ? `
+      <details class="zeek-context-details">
+        <summary>Technical details</summary>
+        <dl class="detail-grid detail-facts">
+          ${detailField("Sensor", zeek.source_instance)}
+          ${detailField("Correlation method", zeek.match_strategy)}
+          ${detailField("Candidates", zeek.candidate_count)}
+          ${detailField(live ? "Investigated" : "Recorded", formatTimestamp(zeek.recorded_at))}
+        </dl>
+        <pre class="raw-event">${escapeHtml(contextJson)}</pre>
+      </details>` : '<p class="detail-empty zeek-context-empty">No single connection record was available for automatic enrichment.</p>'}`;
+}
+
+function renderZeekContextPanel(zeek, options = {}) {
+  const host = document.getElementById("zeekContextPanel");
+  if (host) host.innerHTML = zeekPanelMarkup(zeek, options);
+}
+
+async function refreshZeekContext() {
+  const eventId = Number(activeDetail?.id);
+  if (!Number.isInteger(eventId) || eventId < 1) return;
+  const generation = detailGeneration;
+  if (!detailRequestIsCurrent(generation, eventId)) return;
+  const button = document.querySelector("[data-refresh-zeek]");
+  if (button) button.disabled = true;
+  try {
+    const response = await fetch(`${API}/api/v1/verdicts/${eventId}/zeek-context`, {
+      cache: "no-store",
+      signal: detailAbort?.signal,
+    });
+    if (!detailRequestIsCurrent(generation, eventId)) return;
+    if (!response.ok) throw new Error(`Zeek lookup failed (${response.status})`);
+    const data = await response.json();
+    if (!detailRequestIsCurrent(generation, eventId)) return;
+    activeDetail = { ...activeDetail, zeek_context: data.live };
+    renderZeekContextPanel(data.live, { live: true });
+  } catch (error) {
+    if (!detailRequestIsCurrent(generation, eventId)) return;
+    showToast(error.message, true);
+    if (button) button.disabled = false;
+  }
+}
+
 function renderDetail(verdict) {
   activeDetail = verdict;
   const sensor = verdict.sensor_context?.source ?? "suricata";
@@ -1076,6 +1339,10 @@ function renderDetail(verdict) {
         </section>
 
         ${renderSourceContext(verdict, sensor)}
+
+        <section class="detail-section" id="zeekContextPanel">
+          ${zeekPanelMarkup(verdict.zeek_context)}
+        </section>
 
         <section class="detail-section" id="relatedPanel">
           <h3>Related activity</h3>
@@ -1529,6 +1796,10 @@ document.getElementById("loadOlderButton").addEventListener("click", loadOlder);
 document.getElementById("returnLiveButton").addEventListener("click", returnToLive);
 
 document.getElementById("detailPageContent").addEventListener("click", async (event) => {
+  if (event.target.closest("[data-refresh-zeek]")) {
+    await refreshZeekContext();
+    return;
+  }
   const configButton = event.target.closest("[data-config-from-alert]");
   if (configButton) {
     openConfigurationFromAlert(configButton.dataset.configFromAlert);
