@@ -1,5 +1,5 @@
 # Python 3.12 Linux runtime lock, captured from the healthy omv1 dashboard.
-annotated-doc==0.0.4
+annotated-doc==0.0.5
 annotated-types==0.7.0
 anyio==4.14.2
 click==8.4.2
