@@ -1,9 +1,11 @@
 # Threat model
 
 This document describes the trust assumptions and known limitations of the
-currently shipped **TriageWall Core** application. TriageWall Lab is a future
-component with a separate threat model and graduation gate; see
-[Core and Lab product boundary](core-lab-product-boundary.md).
+currently shipped **TriageWall Core** application. TriageWall Lab is an
+incubating, non-production component with a separate
+[Lab threat model](lab-threat-model.md),
+[hostile-upload matrix](lab-hostile-upload-matrix.md), and graduation gate; see
+also the [Core and Lab product boundary](core-lab-product-boundary.md).
 
 TriageWall targets a single trusted operator running services on a private
 homelab network. It is not a multi-tenant or internet-facing application.

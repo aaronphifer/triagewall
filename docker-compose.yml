@@ -67,6 +67,11 @@ services:
       POSITION_PATH: ${POSITION_PATH:-/var/lib/triagewall/position.json}
       POLL_INTERVAL: ${POLL_INTERVAL:-10}
       TRIAGEWALL_CONFIG_RELOAD_INTERVAL_SECONDS: ${TRIAGEWALL_CONFIG_RELOAD_INTERVAL_SECONDS:-5}
+      ZEEK_ENRICHMENT_ENABLED: ${ZEEK_ENRICHMENT_ENABLED:-false}
+      ZEEK_INDEX_PATH: ${ZEEK_INDEX_PATH:-/var/lib/triagewall/zeek-context.db}
+      ZEEK_SOURCE_ID: ${ZEEK_SOURCE_ID:-zeek-local}
+      ZEEK_CATCHUP_TIMEOUT_SECONDS: ${ZEEK_CATCHUP_TIMEOUT_SECONDS:-3}
+      ZEEK_CATCHUP_RETRY_INTERVAL_SECONDS: ${ZEEK_CATCHUP_RETRY_INTERVAL_SECONDS:-0.5}
 
       OLLAMA_HOST: ${OLLAMA_HOST:-http://localhost:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-hf.co/gabriellarson/Foundation-Sec-8B-Instruct-GGUF:Q5_K_M}
@@ -82,6 +87,46 @@ services:
     depends_on:
       config-bootstrap:
         condition: service_completed_successfully
+    restart: unless-stopped
+
+  zeek-ingest:
+    profiles: ["zeek"]
+    build:
+      context: .
+      dockerfile: Dockerfile.ingest
+    command:
+      - python3
+      - triagewall/zeek_ingest.py
+    environment:
+      TZ: ${TZ:-UTC}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      PYTHONDONTWRITEBYTECODE: "1"
+      ZEEK_CONN_PATH: ${ZEEK_CONN_PATH:-/var/log/zeek/current/conn.log}
+      ZEEK_DNS_PATH: ${ZEEK_DNS_PATH:-/var/log/zeek/current/dns.log}
+      ZEEK_HTTP_PATH: ${ZEEK_HTTP_PATH:-/var/log/zeek/current/http.log}
+      ZEEK_SSL_PATH: ${ZEEK_SSL_PATH:-/var/log/zeek/current/ssl.log}
+      ZEEK_X509_PATH: ${ZEEK_X509_PATH:-/var/log/zeek/current/x509.log}
+      ZEEK_FILES_PATH: ${ZEEK_FILES_PATH:-/var/log/zeek/current/files.log}
+      ZEEK_NOTICE_PATH: ${ZEEK_NOTICE_PATH:-/var/log/zeek/current/notice.log}
+      ZEEK_ARCHIVE_ROOT: ${ZEEK_ARCHIVE_ROOT:-/var/log/zeek}
+      ZEEK_INDEX_PATH: ${ZEEK_INDEX_PATH:-/var/lib/triagewall/zeek-context.db}
+      ZEEK_SOURCE_ID: ${ZEEK_SOURCE_ID:-zeek-local}
+      ZEEK_POLL_INTERVAL: ${ZEEK_POLL_INTERVAL:-2}
+      ZEEK_MAX_RECORDS_PER_POLL: ${ZEEK_MAX_RECORDS_PER_POLL:-1000}
+      ZEEK_EOF_STABLE_OBSERVATIONS: ${ZEEK_EOF_STABLE_OBSERVATIONS:-2}
+      ZEEK_RETENTION_DAYS: ${ZEEK_RETENTION_DAYS:-7}
+      ZEEK_PRUNE_INTERVAL: ${ZEEK_PRUNE_INTERVAL:-60}
+      ZEEK_PRUNE_BATCH_SIZE: ${ZEEK_PRUNE_BATCH_SIZE:-1000}
+      ZEEK_PRUNE_MAX_ROWS: ${ZEEK_PRUNE_MAX_ROWS:-10000}
+    volumes:
+      - ${HOST_DATA_DIR:-./data}:/var/lib/triagewall
+      - ${HOST_ZEEK_LOG_DIR:-/opt/zeek/logs}:/var/log/zeek:ro
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    network_mode: none
     restart: unless-stopped
 
   dashboard:
@@ -109,6 +154,9 @@ services:
       TRIAGEWALL_API_REDACT_IPS: ${TRIAGEWALL_API_REDACT_IPS:-false}
       TRIAGEWALL_API_IP_HASH_SECRET: ${TRIAGEWALL_API_IP_HASH_SECRET:-}
       TRIAGEWALL_CONFIG_WRITES_ENABLED: ${TRIAGEWALL_CONFIG_WRITES_ENABLED:-false}
+      ZEEK_ENRICHMENT_ENABLED: ${ZEEK_ENRICHMENT_ENABLED:-false}
+      ZEEK_INDEX_PATH: ${ZEEK_INDEX_PATH:-/var/lib/triagewall/zeek-context.db}
+      ZEEK_SOURCE_ID: ${ZEEK_SOURCE_ID:-zeek-local}
       DASHBOARD_HOST: ${DASHBOARD_HOST:-0.0.0.0}
       DASHBOARD_PORT: ${DASHBOARD_PORT:-8084}
       TRUSTED_HOSTS: ${TRUSTED_HOSTS:-localhost}
@@ -145,3 +193,118 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+
+  lab-init:
+    profiles: ["lab"]
+    build:
+      context: .
+      dockerfile: Dockerfile.lab
+    user: "0:0"
+    command:
+      - chown
+      - "65532:65532"
+      - /var/lib/triagewall-lab
+    volumes:
+      - triagewall-lab-data:/var/lib/triagewall-lab
+    read_only: true
+    network_mode: none
+    cap_drop:
+      - ALL
+    pids_limit: 128
+    cap_add:
+      - CHOWN
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
+
+  lab:
+    profiles: ["lab"]
+    build:
+      context: .
+      dockerfile: Dockerfile.lab
+    command:
+      - uvicorn
+      - triagewall.lab.app:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8085"
+    environment:
+      TZ: ${TZ:-UTC}
+      PYTHONDONTWRITEBYTECODE: "1"
+      TRIAGEWALL_LAB_DATA_DIR: /var/lib/triagewall-lab
+      TRIAGEWALL_LAB_OPERATOR: ${TRIAGEWALL_LAB_OPERATOR:?set TRIAGEWALL_LAB_OPERATOR}
+      TRIAGEWALL_LAB_API_KEY_HASH: ${TRIAGEWALL_LAB_API_KEY_HASH:?set TRIAGEWALL_LAB_API_KEY_HASH}
+      TRIAGEWALL_LAB_SESSION_SECRET: ${TRIAGEWALL_LAB_SESSION_SECRET:?set TRIAGEWALL_LAB_SESSION_SECRET}
+      TRIAGEWALL_LAB_COOKIE_SECURE: ${TRIAGEWALL_LAB_COOKIE_SECURE:-false}
+      TRIAGEWALL_LAB_SESSION_TTL_SECONDS: ${TRIAGEWALL_LAB_SESSION_TTL_SECONDS:-28800}
+      TRIAGEWALL_LAB_TRUSTED_HOSTS: ${TRIAGEWALL_LAB_TRUSTED_HOSTS:-localhost}
+      TRIAGEWALL_LAB_STORAGE_QUOTA_BYTES: ${TRIAGEWALL_LAB_STORAGE_QUOTA_BYTES:-10737418240}
+      TRIAGEWALL_LAB_MAX_PENDING_JOBS: ${TRIAGEWALL_LAB_MAX_PENDING_JOBS:-4}
+      TRIAGEWALL_LAB_MAX_RESULTS_PER_JOB: ${TRIAGEWALL_LAB_MAX_RESULTS_PER_JOB:-1000}
+    volumes:
+      - triagewall-lab-data:/var/lib/triagewall-lab
+    ports:
+      - "${LAB_BIND_ADDRESS:-127.0.0.1}:${LAB_PORT:-8085}:8085"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m,mode=1777
+    cap_drop:
+      - ALL
+    pids_limit: 128
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - triagewall-lab-ui
+    depends_on:
+      lab-init:
+        condition: service_completed_successfully
+      lab-worker:
+        condition: service_started
+    restart: unless-stopped
+
+  lab-worker:
+    profiles: ["lab"]
+    build:
+      context: .
+      dockerfile: Dockerfile.lab
+    command:
+      - python3
+      - -m
+      - triagewall.lab.worker
+    environment:
+      TZ: ${TZ:-UTC}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      PYTHONDONTWRITEBYTECODE: "1"
+      TRIAGEWALL_LAB_DATA_DIR: /var/lib/triagewall-lab
+      TRIAGEWALL_LAB_OLLAMA_URL: ${TRIAGEWALL_LAB_OLLAMA_URL:?set TRIAGEWALL_LAB_OLLAMA_URL to a private literal IP}
+      TRIAGEWALL_LAB_REQUEST_TIMEOUT_SECONDS: ${TRIAGEWALL_LAB_REQUEST_TIMEOUT_SECONDS:-300}
+      TRIAGEWALL_LAB_POLL_INTERVAL_SECONDS: ${TRIAGEWALL_LAB_POLL_INTERVAL_SECONDS:-2}
+      TRIAGEWALL_LAB_MAX_RESULTS_PER_JOB: ${TRIAGEWALL_LAB_MAX_RESULTS_PER_JOB:-1000}
+      TRIAGEWALL_LAB_STORAGE_QUOTA_BYTES: ${TRIAGEWALL_LAB_STORAGE_QUOTA_BYTES:-10737418240}
+      TRIAGEWALL_LAB_RETENTION_DAYS: ${TRIAGEWALL_LAB_RETENTION_DAYS:-30}
+      TRIAGEWALL_LAB_RETENTION_BATCH_SIZE: ${TRIAGEWALL_LAB_RETENTION_BATCH_SIZE:-10}
+    volumes:
+      - triagewall-lab-data:/var/lib/triagewall-lab
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m,mode=1777
+    cap_drop:
+      - ALL
+    pids_limit: 128
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - triagewall-lab-model
+    depends_on:
+      lab-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  triagewall-lab-data:
+
+networks:
+  triagewall-lab-ui:
+    internal: true
+  triagewall-lab-model:

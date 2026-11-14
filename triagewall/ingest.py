@@ -72,15 +72,18 @@ from triage import (
     MODEL,
     PREFILTER_CONFIG_PATH,
     call_ollama,
+    classify_suricata,
     get_asset_context,
     insert_triage_row,
     set_configuration_bundle_owner,
+    validate_zeek_catchup_settings,
 )
 from sensor_event import (
     SuricataValidationError,
     normalize_suricata_event,
     suricata_classification_alert,
 )
+from zeek_provider import SQLiteZeekContextProvider
 
 # --- Config ---
 DEMO_MODE = parse_boolean(
@@ -93,6 +96,32 @@ DB_PATH = Path(
     os.environ.get("DB_PATH")
     or os.environ.get("TRIAGE_DB")
     or str(_REPO_ROOT / "triage.db")
+)
+ZEEK_ENRICHMENT_ENABLED = parse_boolean(
+    os.environ.get("ZEEK_ENRICHMENT_ENABLED", "false"),
+    "ZEEK_ENRICHMENT_ENABLED",
+)
+ZEEK_INDEX_PATH = Path(
+    os.environ.get(
+        "ZEEK_INDEX_PATH",
+        "/var/lib/triagewall/zeek-context.db",
+    )
+)
+ZEEK_SOURCE_ID = os.environ.get("ZEEK_SOURCE_ID", "zeek-local")
+try:
+    (
+        ZEEK_CATCHUP_TIMEOUT_SECONDS,
+        ZEEK_CATCHUP_RETRY_INTERVAL_SECONDS,
+    ) = validate_zeek_catchup_settings(
+        float(os.environ.get("ZEEK_CATCHUP_TIMEOUT_SECONDS", "3")),
+        float(os.environ.get("ZEEK_CATCHUP_RETRY_INTERVAL_SECONDS", "0.5")),
+    )
+except ValueError as exc:
+    raise RuntimeError(f"invalid Zeek catch-up configuration: {exc}") from exc
+ZEEK_CONTEXT_PROVIDER = (
+    SQLiteZeekContextProvider(ZEEK_INDEX_PATH, ZEEK_SOURCE_ID)
+    if ZEEK_ENRICHMENT_ENABLED
+    else None
 )
 POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "10"))  # seconds
 LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO")
@@ -647,6 +676,7 @@ def insert_with_retry(
     verdict,
     asset_context=None,
     config_bundle=None,
+    zeek_enrichment=None,
     max_retries=3,
     base_backoff_ms=100,
 ):
@@ -662,6 +692,7 @@ def insert_with_retry(
                 verdict,
                 asset_context=asset_context,
                 config_bundle=config_bundle,
+                zeek_enrichment=zeek_enrichment,
             )
             conn.commit()
             return True
@@ -735,11 +766,28 @@ def process_line(conn, line):
     sig = normalized_event.signature
     try:
         asset_context = get_asset_context(classification_event)
-        verdict = call_ollama(
-            classification_event,
-            asset_context=asset_context,
-        )
+        call_kwargs = {"asset_context": asset_context}
+        zeek_enrichment = None
+        if ZEEK_ENRICHMENT_ENABLED:
+            call_kwargs.update(
+                normalized_event=normalized_event,
+                zeek_context_provider=ZEEK_CONTEXT_PROVIDER,
+            )
+            classification = classify_suricata(
+                classification_event,
+                **call_kwargs,
+                zeek_catchup_timeout_seconds=ZEEK_CATCHUP_TIMEOUT_SECONDS,
+                zeek_catchup_retry_interval_seconds=(
+                    ZEEK_CATCHUP_RETRY_INTERVAL_SECONDS
+                ),
+            )
+            verdict = classification.verdict
+            zeek_enrichment = classification.zeek_enrichment
+        else:
+            verdict = call_ollama(classification_event, **call_kwargs)
         insert_kwargs = {"asset_context": asset_context}
+        if zeek_enrichment is not None:
+            insert_kwargs["zeek_enrichment"] = zeek_enrichment
         if RUNTIME_CONFIG_OWNER is not None:
             insert_kwargs["config_bundle"] = RUNTIME_CONFIG_OWNER.bundle
         if not insert_with_retry(

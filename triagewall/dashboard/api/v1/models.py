@@ -113,6 +113,36 @@ class AssetContext(BaseModel):
     destination: dict[str, Any] | None = None
 
 
+class ZeekContext(BaseModel):
+    """Bounded enrichment provenance; full context appears on detail only."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    eligibility_reason: Literal[
+        "eligible",
+        "prefilter_resolved",
+        "unsupported_source",
+        "missing_endpoint",
+        "unsupported_protocol",
+        "missing_port",
+    ]
+    lookup_status: Literal[
+        "disabled",
+        "matched",
+        "no_match",
+        "ambiguous",
+        "unavailable",
+        "invalid_response",
+    ]
+    source_instance: str | None = None
+    match_strategy: str | None = None
+    record_count: int = Field(ge=0, le=32, strict=True)
+    candidate_count: int = Field(ge=0, le=33, strict=True)
+    truncated: bool
+    recorded_at: str
+    context: dict[str, Any] | None = None
+
+
 class VerdictRow(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -138,6 +168,7 @@ class VerdictRow(BaseModel):
     reviewed_at: str | None = None
     asset_context: AssetContext | None = None
     sensor_context: SensorContext | None = None
+    zeek_context: ZeekContext | None = None
     raw_alert: str | None = None
 
 
@@ -168,6 +199,16 @@ class VerdictDetailResponse(BaseModel):
     generated_at: str
     mode: Literal["local", "demo"]
     verdict: VerdictRow
+
+
+class ZeekContextResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    generated_at: str
+    mode: Literal["local"]
+    event_id: int
+    stored: ZeekContext
+    live: ZeekContext
 
 
 RelationshipKind = Literal["same_rule", "same_source_ip", "same_destination_ip"]

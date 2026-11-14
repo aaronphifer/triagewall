@@ -23,6 +23,7 @@ REQUIRED_TABLES = {
     "ingest_failures",
     "asset_snapshots",
     "sensor_event_context",
+    "zeek_alert_enrichment",
     "operator_config_revisions",
     "operator_config_state",
     "operator_config_audit",

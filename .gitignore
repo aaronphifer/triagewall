@@ -2,6 +2,7 @@
 .env
 .env.bak*
 .env.local
+triagewall-lab-credentials.txt
 
 # Backups
 *.bak

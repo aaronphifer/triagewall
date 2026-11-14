@@ -42,6 +42,7 @@ from triagewall.database import connect_database
 from triagewall.environment import parse_boolean
 from triagewall.migrations import verify_db_initialized
 from triagewall.time_utils import format_utc_timestamp
+from triagewall.zeek_provider import SQLiteZeekContextProvider
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -95,6 +96,19 @@ DB_PATH = Path(
     os.environ.get("DB_PATH")
     or os.environ.get("TRIAGE_DB")
     or "/var/lib/triagewall/triage.db"
+)
+ZEEK_ENRICHMENT_ENABLED = parse_boolean(
+    os.environ.get("ZEEK_ENRICHMENT_ENABLED", "false"),
+    "ZEEK_ENRICHMENT_ENABLED",
+)
+ZEEK_INDEX_PATH = Path(
+    os.environ.get("ZEEK_INDEX_PATH", "/var/lib/triagewall/zeek-context.db")
+)
+ZEEK_SOURCE_ID = os.environ.get("ZEEK_SOURCE_ID", "zeek-local")
+ZEEK_CONTEXT_PROVIDER = (
+    SQLiteZeekContextProvider(ZEEK_INDEX_PATH, ZEEK_SOURCE_ID)
+    if ZEEK_ENRICHMENT_ENABLED
+    else None
 )
 STATIC_DIR = Path(__file__).parent / "static"
 TRUSTED_HOSTS = {
@@ -226,6 +240,15 @@ def row_to_dict(row):
     sensor_event_id = d.pop("sensor_event_id", None)
     sensor_agent_id = d.pop("sensor_agent_id", None)
     sensor_agent_name = d.pop("sensor_agent_name", None)
+    zeek_eligibility_reason = d.pop("zeek_eligibility_reason", None)
+    zeek_lookup_status = d.pop("zeek_lookup_status", None)
+    zeek_source_instance = d.pop("zeek_source_instance", None)
+    zeek_match_strategy = d.pop("zeek_match_strategy", None)
+    zeek_record_count = d.pop("zeek_record_count", None)
+    zeek_candidate_count = d.pop("zeek_candidate_count", None)
+    zeek_truncated = d.pop("zeek_truncated", None)
+    zeek_recorded_at = d.pop("zeek_recorded_at", None)
+    zeek_context_json = d.pop("zeek_context_json", None)
 
     def parse_snapshot(value):
         if not isinstance(value, str):
@@ -249,6 +272,21 @@ def row_to_dict(row):
         "event_id": sensor_event_id,
         "agent": agent,
     }
+    zeek_context = None
+    if zeek_eligibility_reason is not None and zeek_lookup_status is not None:
+        parsed_context = parse_snapshot(zeek_context_json)
+        zeek_context = {
+            "eligibility_reason": zeek_eligibility_reason,
+            "lookup_status": zeek_lookup_status,
+            "source_instance": zeek_source_instance,
+            "match_strategy": zeek_match_strategy,
+            "record_count": int(zeek_record_count or 0),
+            "candidate_count": int(zeek_candidate_count or 0),
+            "truncated": bool(zeek_truncated),
+            "recorded_at": zeek_recorded_at,
+            "context": parsed_context,
+        }
+    d["zeek_context"] = zeek_context
     for field in ("timestamp", "processed_at", "reviewed_at"):
         if d.get(field):
             try:
@@ -268,6 +306,7 @@ def row_to_dict(row):
             "event_id": None,
             "agent": None,
         }
+        d["zeek_context"] = None
     elif API_REDACT_IPS:
         d["src_ip"] = services.hash_ip(d.get("src_ip"), API_IP_HASH_SECRET)
         d["dest_ip"] = services.hash_ip(d.get("dest_ip"), API_IP_HASH_SECRET)
@@ -280,6 +319,7 @@ def row_to_dict(row):
         d["reasoning"] = None
         d["human_notes"] = None
         d["asset_context"] = {"source": None, "destination": None}
+        d["zeek_context"] = None
     return d
 
 
@@ -307,6 +347,10 @@ def _config_writes_enabled() -> bool:
     return CONFIG_WRITES_ENABLED
 
 
+def _get_zeek_context_provider():
+    return ZEEK_CONTEXT_PROVIDER
+
+
 _router_kwargs = dict(
     auth=auth_state,
     db_factory=db,
@@ -323,6 +367,7 @@ app.include_router(
     create_v1_router(
         **_router_kwargs,
         config_writes_enabled=_config_writes_enabled,
+        get_zeek_context_provider=_get_zeek_context_provider,
     )
 )
 app.include_router(create_legacy_router(**_router_kwargs))

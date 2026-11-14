@@ -1,0 +1,530 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://triagewall.dev/schemas/lab-contracts-v1.schema.json",
+  "title": "TriageWall Lab Phase 0 contracts v1",
+  "description": "Static shape for candidate, experiment, paired result, and sanitized promotion-report documents. Cross-field invariants and hashes are enforced by triagewall.lab_contracts.",
+  "oneOf": [
+    {"$ref": "#/$defs/candidate"},
+    {"$ref": "#/$defs/experiment"},
+    {"$ref": "#/$defs/result"},
+    {"$ref": "#/$defs/report"}
+  ],
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "nullableDigest": {
+      "oneOf": [
+        {"$ref": "#/$defs/digest"},
+        {"type": "null"}
+      ]
+    },
+    "safeIdentifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:+-]{0,127}$"
+    },
+    "nullableIdentifier": {
+      "oneOf": [
+        {"$ref": "#/$defs/safeIdentifier"},
+        {"type": "null"}
+      ]
+    },
+    "timestamp": {
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{6}Z$"
+    },
+    "nullableText": {
+      "oneOf": [
+        {"type": "string", "minLength": 1, "maxLength": 2000},
+        {"type": "null"}
+      ]
+    },
+    "verdict": {
+      "enum": ["real", "false_positive", "uncertain"]
+    },
+    "reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "sha256"],
+      "properties": {
+        "id": {"$ref": "#/$defs/safeIdentifier"},
+        "sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "digest"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 256},
+        "digest": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "prompt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "system_prompt",
+        "classification_prefix",
+        "matched_zeek_instruction",
+        "content_sha256"
+      ],
+      "properties": {
+        "system_prompt": {"type": "string", "minLength": 1, "maxLength": 65536},
+        "classification_prefix": {"type": "string", "minLength": 1, "maxLength": 65536},
+        "matched_zeek_instruction": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "maxLength": 65536
+        },
+        "response_mode": {
+          "enum": ["core_v1", "zeek_assessment_v1"]
+        },
+        "content_sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "version",
+        "candidate_id",
+        "created_at",
+        "author",
+        "parent_candidate_id",
+        "rationale",
+        "expected_invariant",
+        "model",
+        "prompt_templates",
+        "revisions",
+        "inference",
+        "content_sha256"
+      ],
+      "properties": {
+        "schema": {"const": "triagewall.lab-candidate"},
+        "version": {"const": 1},
+        "candidate_id": {"$ref": "#/$defs/safeIdentifier"},
+        "created_at": {"$ref": "#/$defs/timestamp"},
+        "author": {"type": "string", "minLength": 1, "maxLength": 256},
+        "parent_candidate_id": {"$ref": "#/$defs/nullableIdentifier"},
+        "rationale": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "expected_invariant": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "model": {"$ref": "#/$defs/model"},
+        "prompt_templates": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["suricata", "wazuh"],
+          "properties": {
+            "suricata": {
+              "oneOf": [
+                {"$ref": "#/$defs/prompt"},
+                {"type": "null"}
+              ]
+            },
+            "wazuh": {
+              "oneOf": [
+                {"$ref": "#/$defs/prompt"},
+                {"type": "null"}
+              ]
+            }
+          }
+        },
+        "revisions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source_projection",
+            "response_contract",
+            "prefilter_policy",
+            "asset_context_projection",
+            "zeek_evidence_projection"
+          ],
+          "properties": {
+            "source_projection": {"$ref": "#/$defs/digest"},
+            "response_contract": {"$ref": "#/$defs/digest"},
+            "prefilter_policy": {"$ref": "#/$defs/digest"},
+            "asset_context_projection": {"$ref": "#/$defs/digest"},
+            "zeek_evidence_projection": {"$ref": "#/$defs/digest"}
+          }
+        },
+        "inference": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["temperature", "num_predict", "num_ctx", "seed"],
+          "properties": {
+            "temperature": {"type": "number", "minimum": 0, "maximum": 2},
+            "num_predict": {"type": "integer", "minimum": 1, "maximum": 16384},
+            "num_ctx": {"type": "integer", "minimum": 256, "maximum": 1048576},
+            "seed": {
+              "type": ["integer", "null"],
+              "minimum": 0,
+              "maximum": 9223372036854775807
+            }
+          }
+        },
+        "content_sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "experiment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "version",
+        "experiment_id",
+        "created_at",
+        "question",
+        "baseline_candidate",
+        "candidate",
+        "bundle",
+        "changed_components",
+        "evidence_conditions",
+        "event_ids",
+        "repetitions",
+        "execution_order_seed",
+        "labels_required",
+        "content_sha256"
+      ],
+      "properties": {
+        "schema": {"const": "triagewall.lab-experiment"},
+        "version": {"const": 1},
+        "experiment_id": {"$ref": "#/$defs/safeIdentifier"},
+        "created_at": {"$ref": "#/$defs/timestamp"},
+        "question": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "baseline_candidate": {"$ref": "#/$defs/reference"},
+        "candidate": {"$ref": "#/$defs/reference"},
+        "bundle": {"$ref": "#/$defs/reference"},
+        "changed_components": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["model", "prompt", "evidence_projection", "response_contract", "prefilter_policy"]
+          }
+        },
+        "evidence_conditions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["no_zeek", "connection_only", "connection_plus_application"]
+          }
+        },
+        "event_ids": {
+          "oneOf": [
+            {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 1000,
+              "uniqueItems": true,
+              "items": {"$ref": "#/$defs/safeIdentifier"}
+            },
+            {"type": "null"}
+          ]
+        },
+        "repetitions": {"type": "integer", "minimum": 1, "maximum": 20},
+        "execution_order_seed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9223372036854775807
+        },
+        "labels_required": {"type": "boolean"},
+        "content_sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "score": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "explicit_zeek_assessment",
+        "supported_facts",
+        "unsupported_claims",
+        "claims_zeek_when_absent",
+        "injected_instruction_followed",
+        "canary_disclosed",
+        "human_review_required"
+      ],
+      "properties": {
+        "explicit_zeek_assessment": {"type": "boolean"},
+        "supported_facts": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 2000}
+        },
+        "unsupported_claims": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 2000}
+        },
+        "claims_zeek_when_absent": {"type": "boolean"},
+        "injected_instruction_followed": {"type": "boolean"},
+        "canary_disclosed": {"type": "boolean"},
+        "human_review_required": {"type": "boolean"}
+      }
+    },
+    "outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_id",
+        "candidate_sha256",
+        "model_name",
+        "model_digest",
+        "duration_ms",
+        "model_response",
+        "model_response_sha256",
+        "validation_status",
+        "failure_category",
+        "verdict",
+        "confidence",
+        "reasoning",
+        "score"
+      ],
+      "properties": {
+        "candidate_id": {"$ref": "#/$defs/safeIdentifier"},
+        "candidate_sha256": {"$ref": "#/$defs/digest"},
+        "model_name": {"type": "string", "minLength": 1, "maxLength": 256},
+        "model_digest": {"$ref": "#/$defs/digest"},
+        "duration_ms": {"type": "integer", "minimum": 0, "maximum": 3600000},
+        "model_response": {"type": ["string", "null"], "maxLength": 65536},
+        "model_response_sha256": {"$ref": "#/$defs/nullableDigest"},
+        "validation_status": {"enum": ["accepted", "rejected", "timeout", "error"]},
+        "failure_category": {
+          "enum": [null, "transport", "timeout", "invalid_envelope", "invalid_json", "invalid_schema", "canary_disclosure", "runner_error"]
+        },
+        "verdict": {"$ref": "#/$defs/verdict"},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "reasoning": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "score": {"$ref": "#/$defs/score"}
+      }
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "version",
+        "result_id",
+        "experiment",
+        "bundle",
+        "event_id",
+        "evidence_condition",
+        "repetition",
+        "execution_order",
+        "started_at",
+        "completed_at",
+        "runner_sha256",
+        "baseline",
+        "candidate",
+        "content_sha256"
+      ],
+      "properties": {
+        "schema": {"const": "triagewall.lab-result"},
+        "version": {"const": 1},
+        "result_id": {"$ref": "#/$defs/safeIdentifier"},
+        "experiment": {"$ref": "#/$defs/reference"},
+        "bundle": {"$ref": "#/$defs/reference"},
+        "event_id": {"$ref": "#/$defs/safeIdentifier"},
+        "evidence_condition": {
+          "enum": ["no_zeek", "connection_only", "connection_plus_application"]
+        },
+        "repetition": {"type": "integer", "minimum": 1, "maximum": 20},
+        "execution_order": {"enum": ["baseline_first", "candidate_first"]},
+        "started_at": {"$ref": "#/$defs/timestamp"},
+        "completed_at": {"$ref": "#/$defs/timestamp"},
+        "runner_sha256": {"$ref": "#/$defs/digest"},
+        "baseline": {"$ref": "#/$defs/outcome"},
+        "candidate": {"$ref": "#/$defs/outcome"},
+        "content_sha256": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "decisionMetrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "accuracy",
+        "cohens_kappa_pipeline",
+        "cohens_kappa_model_only",
+        "true_positive_recall_pipeline",
+        "true_positive_recall_model_only",
+        "false_positive_rate",
+        "uncertain_rate"
+      ],
+      "properties": {
+        "accuracy": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "cohens_kappa_pipeline": {"type": ["number", "null"], "minimum": -1, "maximum": 1},
+        "cohens_kappa_model_only": {"type": ["number", "null"], "minimum": -1, "maximum": 1},
+        "true_positive_recall_pipeline": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "true_positive_recall_model_only": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "false_positive_rate": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "uncertain_rate": {"type": ["number", "null"], "minimum": 0, "maximum": 1}
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decision_quality", "evidence_use", "safety_validity", "operational_cost"],
+      "properties": {
+        "decision_quality": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["labeled_events", "baseline", "candidate"],
+          "properties": {
+            "labeled_events": {"type": "integer", "minimum": 0, "maximum": 1000},
+            "baseline": {"$ref": "#/$defs/decisionMetrics"},
+            "candidate": {"$ref": "#/$defs/decisionMetrics"}
+          }
+        },
+        "evidence_use": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "matched_results",
+            "baseline_explicit_assessment_rate",
+            "candidate_explicit_assessment_rate",
+            "baseline_supported_fact_rate",
+            "candidate_supported_fact_rate",
+            "baseline_unsupported_claims",
+            "candidate_unsupported_claims",
+            "baseline_absent_zeek_claims",
+            "candidate_absent_zeek_claims",
+            "material_subset_improvement"
+          ],
+          "properties": {
+            "matched_results": {"type": "integer", "minimum": 0, "maximum": 60000},
+            "baseline_explicit_assessment_rate": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+            "candidate_explicit_assessment_rate": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+            "baseline_supported_fact_rate": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+            "candidate_supported_fact_rate": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+            "baseline_unsupported_claims": {"type": "integer", "minimum": 0},
+            "candidate_unsupported_claims": {"type": "integer", "minimum": 0},
+            "baseline_absent_zeek_claims": {"type": "integer", "minimum": 0},
+            "candidate_absent_zeek_claims": {"type": "integer", "minimum": 0},
+            "material_subset_improvement": {"type": ["number", "null"], "minimum": -1, "maximum": 1}
+          }
+        },
+        "safety_validity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "baseline_invalid_results",
+            "candidate_invalid_results",
+            "baseline_canary_disclosures",
+            "candidate_canary_disclosures",
+            "baseline_injection_successes",
+            "candidate_injection_successes",
+            "incomplete_results"
+          ],
+          "properties": {
+            "baseline_invalid_results": {"type": "integer", "minimum": 0, "maximum": 60000},
+            "candidate_invalid_results": {"type": "integer", "minimum": 0, "maximum": 60000},
+            "baseline_canary_disclosures": {"type": "integer", "minimum": 0, "maximum": 60000},
+            "candidate_canary_disclosures": {"type": "integer", "minimum": 0, "maximum": 60000},
+            "baseline_injection_successes": {"type": "integer", "minimum": 0, "maximum": 60000},
+            "candidate_injection_successes": {"type": "integer", "minimum": 0, "maximum": 60000},
+            "incomplete_results": {"type": "integer", "minimum": 0, "maximum": 60000}
+          }
+        },
+        "operational_cost": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "baseline_latency_p50_ms",
+            "baseline_latency_p95_ms",
+            "candidate_latency_p50_ms",
+            "candidate_latency_p95_ms",
+            "baseline_stability_rate",
+            "candidate_stability_rate"
+          ],
+          "properties": {
+            "baseline_latency_p50_ms": {"type": ["number", "null"], "minimum": 0, "maximum": 3600000},
+            "baseline_latency_p95_ms": {"type": ["number", "null"], "minimum": 0, "maximum": 3600000},
+            "candidate_latency_p50_ms": {"type": ["number", "null"], "minimum": 0, "maximum": 3600000},
+            "candidate_latency_p95_ms": {"type": ["number", "null"], "minimum": 0, "maximum": 3600000},
+            "baseline_stability_rate": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+            "candidate_stability_rate": {"type": ["number", "null"], "minimum": 0, "maximum": 1}
+          }
+        }
+      }
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gate_id", "status", "observed", "requirement"],
+      "properties": {
+        "gate_id": {
+          "enum": [
+            "canary_disclosure",
+            "injected_instruction_followed",
+            "unsupported_zeek_claims",
+            "zeek_claim_when_absent",
+            "invalid_or_incomplete",
+            "explicit_matched_assessment",
+            "missed_real",
+            "true_positive_recall",
+            "kappa_pipeline",
+            "kappa_model_only",
+            "uncertain_outcomes",
+            "material_subset_improvement",
+            "repetition_stability"
+          ]
+        },
+        "status": {"enum": ["pass", "fail", "not_evaluated"]},
+        "observed": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "requirement": {"type": "string", "minLength": 1, "maxLength": 2000}
+      }
+    },
+    "report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "version",
+        "report_id",
+        "created_at",
+        "experiment",
+        "bundle",
+        "baseline_candidate",
+        "candidate",
+        "runner_sha256",
+        "expected_result_count",
+        "completed_result_count",
+        "result_set_sha256",
+        "metrics",
+        "gates",
+        "promotion_status",
+        "does_not_authorize_production",
+        "content_sha256"
+      ],
+      "properties": {
+        "schema": {"const": "triagewall.lab-promotion-report"},
+        "version": {"const": 1},
+        "report_id": {"$ref": "#/$defs/safeIdentifier"},
+        "created_at": {"$ref": "#/$defs/timestamp"},
+        "experiment": {"$ref": "#/$defs/reference"},
+        "bundle": {"$ref": "#/$defs/reference"},
+        "baseline_candidate": {"$ref": "#/$defs/reference"},
+        "candidate": {"$ref": "#/$defs/reference"},
+        "runner_sha256": {"$ref": "#/$defs/digest"},
+        "expected_result_count": {"type": "integer", "minimum": 1, "maximum": 60000},
+        "completed_result_count": {"type": "integer", "minimum": 0, "maximum": 60000},
+        "result_set_sha256": {"$ref": "#/$defs/digest"},
+        "metrics": {"$ref": "#/$defs/metrics"},
+        "gates": {
+          "type": "array",
+          "minItems": 13,
+          "maxItems": 13,
+          "items": {"$ref": "#/$defs/gate"}
+        },
+        "promotion_status": {"enum": ["eligible", "blocked", "incomplete"]},
+        "does_not_authorize_production": {"const": true},
+        "content_sha256": {"$ref": "#/$defs/digest"}
+      }
+    }
+  }
+}

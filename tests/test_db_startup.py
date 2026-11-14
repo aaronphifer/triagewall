@@ -117,6 +117,10 @@ class DatabaseStartupTests(unittest.TestCase):
                     """SELECT name FROM sqlite_master
                        WHERE type = 'table' AND name = 'sensor_event_context'"""
                 ).fetchone()
+                zeek_context_table = conn.execute(
+                    """SELECT name FROM sqlite_master
+                       WHERE type = 'table' AND name = 'zeek_alert_enrichment'"""
+                ).fetchone()
                 context_indexes = {
                     row[1]
                     for row in conn.execute(
@@ -135,6 +139,7 @@ class DatabaseStartupTests(unittest.TestCase):
                 conn.close()
 
             self.assertEqual(context_table, ("sensor_event_context",))
+            self.assertEqual(zeek_context_table, ("zeek_alert_enrichment",))
             self.assertIn(SENSOR_IDENTITY_INDEX, context_indexes)
             self.assertIn("source_type", failure_columns)
             self.assertEqual(spc_table, ("spc_anomalies",))

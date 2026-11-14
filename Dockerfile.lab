@@ -1,0 +1,16 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY . /app/
+
+RUN pip install --no-cache-dir -r triagewall/lab/requirements.txt \
+    && mkdir -p /var/lib/triagewall-lab \
+    && chown 65532:65532 /var/lib/triagewall-lab
+
+USER 65532:65532
+
+EXPOSE 8085
+
+CMD ["uvicorn", "triagewall.lab.app:app", "--host", "127.0.0.1", "--port", "8085"]
+

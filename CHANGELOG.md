@@ -4,6 +4,12 @@ All notable changes to TriageWall are documented in this file.
 
 ## Unreleased
 
+### Added
+
+- TriageWall Lab can now build, preview, and idempotently install a complete
+  experiment from one validated `test-package.json` file while preserving the
+  individual-artifact workflow under Advanced details.
+
 ## [v0.4](https://github.com/aaronphifer/triagewall/releases/tag/v0.4) - 2026-08-19
 
 ### Added

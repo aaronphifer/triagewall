@@ -198,9 +198,10 @@ fail for different reasons and need different review.
   validation result, and related context without scanning unbounded history.
 - [ ] **Investigation controls.** Add source, time, IP, subnet, and asset
   filters, then saved views and structured JSON/CSV export.
-- [ ] **Portable event-bundle v1.** Define and validate a sanitized,
-  integrity-protected contract that can reproduce a decision without direct
-  access to the production database or sensor logs.
+- [x] **Portable event-bundle v1 Phase 0 contract.** Define and validate a
+  sanitized, integrity-protected contract that can reproduce a decision
+  without direct access to the production database or sensor logs. Core export
+  remains a separate milestone below.
 - [ ] **Bounded asynchronous LLM queue.** Decouple checkpointed intake from
   model latency only after overload, retry, ordering, and recovery semantics
   are explicit.
@@ -333,10 +334,32 @@ riding on the dashboard feedback boundary.
 Measure candidate behaviour in an isolated Lab, then promote an approved
 revision into Core through an explicit audited boundary.
 
+The implementation draft is documented in
+[TriageWall Lab design](docs/lab-design.md). Its first controlled experiment
+compares Zeek-absent, connection-only, and deeper-evidence conditions to measure
+whether a prompt candidate cites supported Zeek facts and improves decisions.
+
 - [ ] Complete the replay provenance needed to reproduce a decision.
-- [ ] Specify and validate sanitized event-bundle v1.
+- [x] Specify and validate sanitized event-bundle v1 Phase 0 contract.
+- [x] Specify and validate candidate, experiment, paired-result, and sanitized
+  promotion-report v1 contracts.
+- [x] Define the Lab threat model and hostile-upload matrix, including
+  executable Phase 0 validator cases and explicit runtime graduation blockers.
+- [x] Add the initial balanced 15-case sanitized Zeek calibration corpus with
+  condition-specific human verdicts, contribution labels, and fact allowlists.
+- [x] Add the first private prompt-only Lab CLI: trusted experiment builder,
+  paired local-Ollama runner, strict output validation, immutable private
+  per-pair results, and deterministic Zeek evidence-use scoring.
+- [x] Add the first standalone authenticated Lab UI foundation: separate
+  loopback-default container/profile, immutable bundle/candidate/experiment
+  registry, complete-result verification, paired result views, and promotion
+  gate views without Core mounts or production authority.
+- [x] Add the isolated single-worker execution slice: exact-digest queueing,
+  cooperative cancellation, lease-expiry recovery, bounded quota/retention,
+  immutable complete runs, and deterministic aggregate promotion reports.
 - [ ] Build the isolated Lab runtime for replay, comparison, injection tests,
-  and gold-set evaluation without live Core access.
+  richer operational telemetry, audit history, and gold-set evaluation without
+  live Core access.
 - [ ] Compare baseline and candidate outcomes without collapsing distinct
   safety and performance signals into one score.
 - [ ] Require an authenticated operator action to promote a passing candidate;
